@@ -15,6 +15,7 @@ const MC_TIMEOUT_MS: u64 = 3000;
 
 pub struct Link {
     base: *mut u8,
+    overlay_front: AtomicU32,
 }
 
 unsafe impl Send for Link {}
@@ -41,7 +42,7 @@ impl Link {
             return None;
         }
         let base = view.Value as *mut u8;
-        let link = Link { base };
+        let link = Link { base, overlay_front: AtomicU32::new(2) };
         unsafe {
             // Reset everything the host owns; keep Minecraft's half if it is already attached.
             std::ptr::write_bytes(base.add(OFF_SKY_STATE), 0, size_of::<SkyState>());
@@ -73,6 +74,30 @@ impl Link {
 
     fn a64(&self, off: usize) -> &AtomicU64 {
         unsafe { &*(self.base.add(off) as *const AtomicU64) }
+    }
+
+    /// Takes Minecraft's newest overlay frame (HUD, hotbar, open screens) if there is one.
+    pub fn acquire_overlay(&self) -> bool {
+        let state = self.a32(OFF_OVERLAY_CTL);
+        if state.load(Ordering::Acquire) & 4 == 0 {
+            return false;
+        }
+        let old = state.swap(self.overlay_front.load(Ordering::Relaxed), Ordering::AcqRel);
+        self.overlay_front.store(old & 3, Ordering::Relaxed);
+        true
+    }
+
+    /// The overlay frame we hold: (width, height, bottom-up, RGBA pixels).
+    pub fn overlay(&self) -> (u32, u32, bool, &[u8]) {
+        let i = self.overlay_front.load(Ordering::Relaxed) as usize;
+        unsafe {
+            let hdr = self.base.add(OFF_OVERLAY_CTL + 0x40 + i * 0x40);
+            let w = (hdr as *const u32).read_volatile().min(MAX_OVERLAY_W as u32);
+            let h = (hdr.add(4) as *const u32).read_volatile().min(MAX_OVERLAY_H as u32);
+            let flags = (hdr.add(8) as *const u32).read_volatile();
+            let px = std::slice::from_raw_parts(self.base.add(OFF_OVERLAY_PIXELS + i * OVERLAY_SLOT_BYTES), (w * h * 4) as usize);
+            (w, h, flags & 1 != 0, px)
+        }
     }
 
     pub fn heartbeat(&self) {

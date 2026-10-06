@@ -59,3 +59,9 @@ Pattern 2 passthrough: ER native Rust DLL (ModEngine2 external_dlls) <-> hidden 
 - 0.1.7: walls (knee-high horizontal ray pairs per grid edge -> double-sided vertical quads in 1-block slices);
   teleports followed only after a loading screen (no distance-based detection); 1 column per frame (more rays each).
 - 0.1.8: controller support through Elden Ring's own input layer (FD4PadManager in-game pad: move/jump/dash->sprint/crouch->sneak/R1 break/L1 place/triangle inventory/d-pad hotbar); camera = Elden Ring's right stick. Keyboard use in the last 1.5 s turns pad mappings off.
+- user (0.1.8): can't walk up stairs or ladders; wants the Minecraft hotbar visible.
+- 0.1.9: HUD = MC overlay frame -> RLE flat quads on a plane 0.3 m in front of the camera (EzDraw); viewport =
+  real window client size; camera forward sign checked against the player; ladders: ER climbs (ladder state),
+  MC follows after; ER interact (E / triangle) left to ER, MC inventory moved to Tab / R3; ER actions blocked via
+  ActionRequest.disabled_action_inputs instead of ChrDebugFlags.disabled_secondary_actions (which blocked interact).
+  Stairs: cause not yet seen; asked user for a screenshot.

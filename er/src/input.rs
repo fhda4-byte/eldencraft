@@ -18,7 +18,7 @@ use crate::proto::*;
 
 /// (Windows virtual key, SDL scancode). Esc stays with Elden Ring (its menu).
 const KEYS: &[(i32, u16)] = &[
-    (0x41, 4), (0x42, 5), (0x43, 6), (0x44, 7), (0x45, 8), (0x46, 9), (0x47, 10), (0x48, 11),
+    (0x41, 4), (0x42, 5), (0x43, 6), (0x44, 7), (0x46, 9), (0x47, 10), (0x48, 11),
     (0x49, 12), (0x4A, 13), (0x4B, 14), (0x4C, 15), (0x4D, 16), (0x4E, 17), (0x4F, 18), (0x50, 19),
     (0x51, 20), (0x52, 21), (0x53, 22), (0x54, 23), (0x55, 24), (0x56, 25), (0x57, 26), (0x58, 27),
     (0x59, 28), (0x5A, 29),
@@ -26,7 +26,7 @@ const KEYS: &[(i32, u16)] = &[
     (0x39, 38), (0x30, 39),
     (0x0D, 40), // Enter
     (0x08, 42), // Backspace
-    (0x09, 43), // Tab
+    (0x09, 8),  // Tab -> Minecraft's E (inventory); E itself stays Elden Ring's interact
     (0x20, 44), // Space
     (0xBD, 45), // -
     (0xBB, 46), // =
@@ -60,7 +60,7 @@ const PAD_HOLD: &[(UserInputKey, u16, u16)] = &[
     (UserInputKey::Attack, IN_MOUSE_BUTTON, 1), // break / attack
     (UserInputKey::Guard, IN_MOUSE_BUTTON, 3),  // place / use
     (UserInputKey::UseItem, IN_MOUSE_BUTTON, 3),
-    (UserInputKey::EventAction, IN_KEY, 8),    // E: inventory
+    (UserInputKey::ResetCamera, IN_KEY, 8),    // R3: Minecraft inventory (triangle stays Elden Ring's interact)
 ];
 
 /// Keyboard/mouse in use this recently means controller mappings stay off (no double meanings).

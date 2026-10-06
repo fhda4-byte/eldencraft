@@ -7,6 +7,7 @@ mod blocks;
 mod boot;
 mod collision;
 mod coords;
+mod hud;
 mod input;
 mod launcher;
 mod link;
@@ -25,12 +26,43 @@ use proto::*;
 
 /// After a map loads, wait this long before Minecraft takes the player (the game settles it first).
 const SETTLE: Duration = Duration::from_secs(3);
+/// Elden Ring actions switched off while Minecraft drives: attacks, dodge, jump, items, crouch,
+/// backstep, roll, magic, gestures, guard, kicks, two-handing, Torrent. Ladders and interact stay on.
+fn block_actions(a: &mut eldenring::cs::ChrActions, on: bool) {
+    a.set_r1(on);
+    a.set_r2(on);
+    a.set_l1(on);
+    a.set_l2(on);
+    a.set_sp_move(on);
+    a.set_jump(on);
+    a.set_use_item(on);
+    a.set_l3(on);
+    a.set_backstep(on);
+    a.set_rolling(on);
+    a.set_magic_r(on);
+    a.set_magic_l(on);
+    a.set_gesture(on);
+    a.set_guard(on);
+    a.set_emergencystep(on);
+    a.set_light_kick(on);
+    a.set_heavy_kick(on);
+    a.set_change_style_r(on);
+    a.set_change_style_l(on);
+    a.set_rideon(on);
+    a.set_magic_r2(on);
+    a.set_magic_l2(on);
+}
 
 struct State {
     link: Option<link::Link>,
     input: input::Input,
     collision: collision::Collision,
     blocks: blocks::Blocks,
+    hud: hud::Hud,
+    er_phase: bool,
+    viewport: (u32, u32),
+    viewport_checked: Option<Instant>,
+    cam_flip_logged: bool,
     launcher: launcher::Launcher,
     teleport_seq: u32,
     world_id: u32,
@@ -55,6 +87,11 @@ impl State {
             input: input::Input::new(),
             collision: collision::Collision::new(),
             blocks: blocks::Blocks::new(),
+            hud: hud::Hud::new(),
+            er_phase: false,
+            viewport: (1920, 1080),
+            viewport_checked: None,
+            cam_flip_logged: false,
             launcher: launcher::Launcher::new(),
             teleport_seq: 1,
             world_id: 0,
@@ -87,8 +124,17 @@ impl State {
         let mc = link.read_mc_state().unwrap_or_default();
 
         let mut sky = SkyState::default();
-        sky.viewport_w = 1920;
-        sky.viewport_h = 1080;
+        if self.viewport_checked.map_or(true, |t| t.elapsed() > Duration::from_secs(2)) {
+            self.viewport_checked = Some(Instant::now());
+            if let Some(v) = boot::game_client_size() {
+                if v != self.viewport {
+                    log!("game window {}x{}", v.0, v.1);
+                }
+                self.viewport = v;
+            }
+        }
+        sky.viewport_w = self.viewport.0;
+        sky.viewport_h = self.viewport.1;
         sky.game_hour = 12.0;
         sky.teleport_seq = self.teleport_seq;
         sky.collision_epoch = self.collision.epoch;
@@ -158,13 +204,23 @@ impl State {
         self.last_global = Some(global);
 
         // Look direction: Elden Ring's camera is authoritative (Minecraft follows it).
-        let (yaw, pitch) = unsafe { CSCamera::instance() }
-            .ok()
-            .map(|c| {
-                let m = &c.pers_cam_1.matrix;
-                coords::mc_look([m.2.0, m.2.1, m.2.2])
-            })
-            .unwrap_or((0.0, 0.0));
+        // The camera's rows: right, up, forward, position (Havok space). Which way "forward" points
+        // is checked against the player (a third-person camera always looks at them).
+        let cam = unsafe { CSCamera::instance() }.ok().map(|c| {
+            let m = &c.pers_cam_1.matrix;
+            let pos = [m.3.0, m.3.1, m.3.2];
+            let mut fwd = [m.2.0, m.2.1, m.2.2];
+            let to_player = [havok[0] - pos[0], havok[1] + 1.2 - pos[1], havok[2] - pos[2]];
+            if fwd[0] * to_player[0] + fwd[1] * to_player[1] + fwd[2] * to_player[2] < 0.0 {
+                fwd = [-fwd[0], -fwd[1], -fwd[2]];
+                if !self.cam_flip_logged {
+                    log!("camera: forward is -row2");
+                    self.cam_flip_logged = true;
+                }
+            }
+            ([[m.0.0, m.0.1, m.0.2], [m.1.0, m.1.1, m.1.2], fwd, pos], c.pers_cam_1.fov, c.pers_cam_1.aspect_ratio)
+        });
+        let (yaw, pitch) = cam.map(|(m, _, _)| coords::mc_look(m[2])).unwrap_or((0.0, 0.0));
 
         let feet = coords::mc_from_global(global);
         if let Some(t) = self.teleport_to {
@@ -204,6 +260,20 @@ impl State {
         if let Some(g) = er_ground {
             self.collision.fallback_y = Some(g);
         }
+        // Ladders: Elden Ring climbs them itself; Minecraft's player follows when it's done.
+        let on_ladder = player.chr_ins.modules.ladder.state != eldenring::cs::LadderState::None;
+        if on_ladder {
+            if !self.er_phase {
+                log!("ladder: Elden Ring climbs");
+            }
+            self.er_phase = true;
+            mc_ready = false;
+        } else if self.er_phase {
+            log!("ladder: done, Minecraft follows");
+            self.er_phase = false;
+            self.teleport_seq += 1;
+            mc_ready = false;
+        }
         if mc_ready {
             let target_mc = [mc.x, mc.y, mc.z];
             let h = frame.havok_for_mc(target_mc);
@@ -220,8 +290,9 @@ impl State {
             phys.gravity_multiplier = 0.0;
             phys.gravity_disabled = true;
             player.chr_ins.modules.fall.fall_timer = 0.0;
-            // Attacks, rolls and jumps are Minecraft's now; walking stays on for the run animation.
-            player.chr_ins.debug_flags.set_disabled_secondary_actions(true);
+            // Attacks, rolls, jumps and items are Minecraft's now; walking (run animation) and
+            // Elden Ring's interact (graces, doors, ladders, items) stay with Elden Ring.
+            block_actions(&mut player.chr_ins.modules.action_request.disabled_action_inputs, true);
             self.written_global = Some(coords::global_from_mc(target_mc));
             self.driving = true;
         } else {
@@ -258,6 +329,12 @@ impl State {
                 if show_steve {
                     self.blocks.draw_avatar(ez, &frame, at);
                 }
+                if mc_ready {
+                    self.hud.update(link, mc.gui_scale);
+                    if let Some((m, fov, aspect)) = cam {
+                        self.hud.draw(ez, m, fov, aspect);
+                    }
+                }
                 self.blocks.draw(ez, &frame, at, selection)
             }
             Err(_) => 0,
@@ -274,7 +351,7 @@ impl State {
             let phys = &mut p.chr_ins.modules.physics;
             phys.gravity_multiplier = self.saved_gravity.unwrap_or(1.0);
             phys.gravity_disabled = false;
-            p.chr_ins.debug_flags.set_disabled_secondary_actions(false);
+            block_actions(&mut p.chr_ins.modules.action_request.disabled_action_inputs, false);
             if self.hid_model {
                 p.chr_ins.chr_flags1c5.set_enable_render(true);
                 self.hid_model = false;
@@ -299,7 +376,7 @@ impl State {
             None => "no player".into(),
         };
         log!(
-            "frame {} | {} | mc alive {} pid {} flags {:#x} ack {}/{} pos ({:.2}, {:.2}, {:.2}) | driving {} | collision epoch {} columns {} walls {} rays {}/{} | render msgs {} sections {} avatar frames {}",
+            "frame {} | {} | mc alive {} pid {} flags {:#x} ack {}/{} pos ({:.2}, {:.2}, {:.2}) | driving {} | collision epoch {} columns {} walls {} rays {}/{} | render msgs {} sections {} avatar frames {} hud frames {} quads {}",
             self.frames,
             where_,
             link.mc_alive(),
@@ -318,7 +395,9 @@ impl State {
             self.collision.rays_hit + self.collision.rays_missed,
             self.blocks.messages,
             self.blocks.section_count(),
-            self.blocks.avatar_frames
+            self.blocks.avatar_frames,
+            self.hud.frames,
+            self.hud.quad_count()
         );
     }
 }

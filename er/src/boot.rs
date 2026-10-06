@@ -2,12 +2,12 @@
 
 use std::time::{Duration, Instant};
 
-use windows_sys::Win32::Foundation::{BOOL, CloseHandle, HWND, INVALID_HANDLE_VALUE, LPARAM};
+use windows_sys::Win32::Foundation::{BOOL, CloseHandle, HWND, INVALID_HANDLE_VALUE, LPARAM, RECT};
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
 use windows_sys::Win32::System::Threading::GetCurrentProcessId;
-use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, IsWindowVisible};
+use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, GetClientRect, GetWindowThreadProcessId, IsWindowVisible};
 
 unsafe extern "system" fn find_ours(hwnd: HWND, found: LPARAM) -> BOOL {
     let mut pid = 0u32;
@@ -19,6 +19,35 @@ unsafe extern "system" fn find_ours(hwnd: HWND, found: LPARAM) -> BOOL {
         }
     }
     1
+}
+
+unsafe extern "system" fn find_hwnd(hwnd: HWND, out: LPARAM) -> BOOL {
+    let mut pid = 0u32;
+    unsafe {
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if pid == GetCurrentProcessId() && IsWindowVisible(hwnd) != 0 {
+            *(out as *mut HWND) = hwnd;
+            return 0;
+        }
+    }
+    1
+}
+
+/// The game window's client size, for Minecraft's HUD resolution.
+pub fn game_client_size() -> Option<(u32, u32)> {
+    let mut hwnd: HWND = std::ptr::null_mut();
+    unsafe {
+        EnumWindows(Some(find_hwnd), &mut hwnd as *mut HWND as LPARAM);
+        if hwnd.is_null() {
+            return None;
+        }
+        let mut r: RECT = std::mem::zeroed();
+        if GetClientRect(hwnd, &mut r) == 0 {
+            return None;
+        }
+        let (w, h) = ((r.right - r.left) as u32, (r.bottom - r.top) as u32);
+        (w > 0 && h > 0).then_some((w, h))
+    }
 }
 
 pub fn game_window_up() -> bool {
