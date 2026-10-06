@@ -1,5 +1,6 @@
 package dev.skycraft.client.mixin;
 
+import dev.skycraft.client.FollowStep;
 import dev.skycraft.client.SkyClient;
 import dev.skycraft.client.SkyCollider;
 import net.minecraft.client.player.LocalPlayer;
@@ -18,6 +19,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class EntityCollideMixin {
 	@Inject(method = "collide", at = @At("RETURN"), cancellable = true)
 	private void skycraft$smoothSkyrimCollision(Vec3 movement, CallbackInfoReturnable<Vec3> cir) {
+		if ((Object) this instanceof LocalPlayer && FollowStep.pending != null) {
+			// EldenCraft follow mode: exactly where Elden Ring has the player.
+			cir.setReturnValue(FollowStep.pending);
+			FollowStep.pending = null;
+			return;
+		}
 		if ((Object) this instanceof LocalPlayer player && SkyClient.linked() && !player.noPhysics) {
 			cir.setReturnValue(SkyCollider.collide(player, cir.getReturnValue()));
 		}

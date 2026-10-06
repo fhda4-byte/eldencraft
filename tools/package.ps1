@@ -71,6 +71,17 @@ if (-not $NoBuild) {
     try {
         Invoke-Logged "fabric-build" { .\gradlew.bat build -x test --no-configuration-cache --no-daemon }
     } finally { Pop-Location }
+    # Mixin targets checked against the real Minecraft classes (a wrong name only fails in game).
+    try {
+        $mcJars = Get-ChildItem -Recurse "$env:USERPROFILE\.gradle\caches\fabric-loom", "$skySrc\fabric\.gradle" -Filter "*.jar" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match "minecraft" -and $_.Name -notmatch "sources" } | Sort-Object Length -Descending | Select-Object -First 4
+        & {
+            foreach ($j in $mcJars) {
+                "== $($j.FullName)"
+                & javap -cp $j.FullName -p net.minecraft.world.entity.Entity 2>&1 | Select-String " move\(| collide\("
+            }
+        } *>&1 | Out-File "$logs\mixin-check.log"
+    } catch { "mixin check failed: $_" | Out-File "$logs\mixin-check.log" }
 }
 
 $dll = "$root\er\target\release\eldencraft.dll"
@@ -119,6 +130,8 @@ New-Zip "$dist\EldenCraft-$version.zip" ([ordered]@{
     "eldencraft/config_eldencraft.toml" = "$root\er\config_eldencraft.toml"
     "eldencraft/LICENSE.txt" = "$root\LICENSE"
     "eldencraft/THIRD-PARTY-NOTICES.md" = "$root\THIRD-PARTY-NOTICES.md"
+    "eldencraft/LICENSE-hudhook.txt" = "$root\er\LICENSE-hudhook.txt"
+    "eldencraft/LICENSE-MinHook.txt" = "$root\er\LICENSE-MinHook.txt"
 })
 if (Test-Path $pdb) { New-Zip "$dist\EldenCraft-$version-pdb.zip" ([ordered]@{ "eldencraft.pdb" = $pdb }) }
 

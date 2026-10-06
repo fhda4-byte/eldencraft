@@ -1,6 +1,7 @@
 //! EldenCraft, Elden Ring side: loaded by ModEngine2 (external_dlls), offline with Easy Anti-Cheat
-//! off. Talks to a hidden Minecraft (SkyCraft's Fabric mod) over shared memory; Minecraft runs the
-//! player's movement, blocks and inventory, Elden Ring runs and draws the world.
+//! off. Talks to a hidden Minecraft (SkyCraft's Fabric mod) over shared memory. Movement runs here
+//! with Minecraft's physics on Elden Ring's real collision (walk.rs); Minecraft follows it and runs
+//! blocks, inventory, health and hunger; Elden Ring runs and draws the world.
 //! Design and status: sheets/*.json. Every system here is a row in sheets/systems.json.
 
 mod blocks;
@@ -12,12 +13,14 @@ mod input;
 mod launcher;
 mod link;
 mod log;
+mod overlay;
 mod proto;
+mod walk;
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use eldenring::cs::{CSCamera, CSTaskGroupIndex, CSTaskImp, RendMan, WorldChrMan};
+use eldenring::cs::{CSCamera, CSHavokMan, CSTaskGroupIndex, CSTaskImp, RendMan, WorldChrMan};
 use eldenring::fd4::FD4TaskData;
 use fromsoftware_shared::{FromStatic, SharedTaskImpExt};
 
@@ -26,6 +29,10 @@ use proto::*;
 
 /// After a map loads, wait this long before Minecraft takes the player (the game settles it first).
 const SETTLE: Duration = Duration::from_secs(3);
+/// SkyState flags of ours (EldenCraft's Fabric patch): Minecraft's player follows our position every
+/// tick instead of moving itself, and whether that position is standing on the ground.
+const EC_FOLLOW: u32 = 1 << 8;
+const EC_ON_GROUND: u32 = 1 << 9;
 /// Elden Ring actions switched off while Minecraft drives: attacks, dodge, jump, items, crouch,
 /// backstep, roll, magic, gestures, guard, kicks, two-handing, Torrent. Ladders and interact stay on.
 fn block_actions(a: &mut eldenring::cs::ChrActions, on: bool) {
@@ -74,10 +81,12 @@ struct State {
     settled_since: Option<Instant>,
     last_f5: Option<Instant>,
     hid_model: bool,
-    teleport_to: Option<[f64; 3]>,
     was_loading: bool,
     last_report: Instant,
     frames: u64,
+    walker: walk::Walker,
+    last_tick: Option<Instant>,
+    dt: f64,
 }
 
 impl State {
@@ -103,15 +112,20 @@ impl State {
             settled_since: None,
             last_f5: None,
             hid_model: false,
-            teleport_to: None,
             was_loading: false,
             last_report: Instant::now(),
             frames: 0,
+            walker: walk::Walker::new(),
+            last_tick: None,
+            dt: 0.0,
         }
     }
 
     fn frame(&mut self) {
         self.frames += 1;
+        let now = Instant::now();
+        self.dt = self.last_tick.map_or(0.0, |t| (now - t).as_secs_f64());
+        self.last_tick = Some(now);
         let Some(link) = self.link.take() else { return };
         self.frame_linked(&link);
         self.link = Some(link);
@@ -151,6 +165,7 @@ impl State {
             link.write_sky_state(&sky);
             self.input.poll(link, false, false);
             self.release(None);
+            self.hud.publish(false);
             self.report(link, &mc, None);
             return;
         };
@@ -164,6 +179,7 @@ impl State {
             link.write_sky_state(&sky);
             self.input.poll(link, false, false);
             self.release(Some(&mut *player));
+            self.hud.publish(false);
             self.report(link, &mc, None);
             return;
         }
@@ -223,44 +239,14 @@ impl State {
         let (yaw, pitch) = cam.map(|(m, _, _)| coords::mc_look(m[2])).unwrap_or((0.0, 0.0));
 
         let feet = coords::mc_from_global(global);
-        if let Some(t) = self.teleport_to {
-            if mc.teleport_ack == self.teleport_seq {
-                self.teleport_to = None;
-            } else {
-                // Put the Tarnished there too, so both games agree while Minecraft catches up.
-                let h = frame.havok_for_mc(t);
-                let phys = &mut player.chr_ins.modules.physics;
-                phys.position.0 = h[0];
-                phys.position.1 = h[1];
-                phys.position.2 = h[2];
-                phys.chr_proxy_pos_update_requested = true;
-            }
-        }
-        let sky_pos = self.teleport_to.unwrap_or(feet);
-        sky.flags = SKY_IN_GAME;
-        sky.world_id = world_id;
-        sky.teleport_seq = self.teleport_seq;
-        sky.collision_epoch = self.collision.epoch;
-        sky.pos_x = sky_pos[0];
-        sky.pos_y = sky_pos[1];
-        sky.pos_z = sky_pos[2];
-        sky.yaw = yaw;
-        sky.pitch = pitch;
-        link.write_sky_state(&sky);
 
-        // Minecraft drives the player once it is in its world and has followed our last teleport.
+        // Minecraft takes the player once it is in its world, has followed our last teleport, and the
+        // map has settled.
         let mut mc_ready = mc_alive
             && (mc.flags & MC_IN_WORLD) != 0
             && mc.teleport_ack == self.teleport_seq
             && settled.elapsed() > SETTLE;
-
-        // Ground under the player, from Elden Ring's own collision: never let Minecraft pull the
-        // character under Elden Ring's floor (a gap in the collision we streamed).
-        let er_ground = collision::ground_below(&frame, player, feet[0], feet[2], feet[1] + 1.5, 6.0);
-        if let Some(g) = er_ground {
-            self.collision.fallback_y = Some(g);
-        }
-        // Ladders: Elden Ring climbs them itself; Minecraft's player follows when it's done.
+        // Ladders: Elden Ring climbs them itself (Minecraft's player follows its position meanwhile).
         let on_ladder = player.chr_ins.modules.ladder.state != eldenring::cs::LadderState::None;
         if on_ladder {
             if !self.er_phase {
@@ -269,19 +255,28 @@ impl State {
             self.er_phase = true;
             mc_ready = false;
         } else if self.er_phase {
-            log!("ladder: done, Minecraft follows");
+            log!("ladder: done");
             self.er_phase = false;
-            self.teleport_seq += 1;
-            mc_ready = false;
         }
+        let screen_open = (mc.flags & MC_SCREEN_OPEN) != 0;
+        self.input.poll(link, mc_ready, screen_open);
+
         if mc_ready {
-            let target_mc = [mc.x, mc.y, mc.z];
-            let h = frame.havok_for_mc(target_mc);
             let phys = &mut player.chr_ins.modules.physics;
             if self.saved_gravity.is_none() {
                 self.saved_gravity = Some(phys.gravity_multiplier);
-                log!("driving: Minecraft moves the player now (gravity was {})", phys.gravity_multiplier);
+                log!("driving: Minecraft movement on Elden Ring's collision (gravity was {})", phys.gravity_multiplier);
             }
+            if !self.walker.active {
+                self.walker.reset(feet);
+            }
+            if let Ok(havok_man) = unsafe { CSHavokMan::instance() } {
+                let world = &*havok_man.phys_world;
+                let input = self.input.movement();
+                self.walker.step(world, &frame, player, &self.blocks, input, yaw, self.dt);
+            }
+            let h = frame.havok_for_mc(self.walker.pos);
+            let phys = &mut player.chr_ins.modules.physics;
             phys.position.0 = h[0];
             phys.position.1 = h[1];
             phys.position.2 = h[2];
@@ -290,16 +285,34 @@ impl State {
             phys.gravity_multiplier = 0.0;
             phys.gravity_disabled = true;
             player.chr_ins.modules.fall.fall_timer = 0.0;
-            // Attacks, rolls, jumps and items are Minecraft's now; walking (run animation) and
-            // Elden Ring's interact (graces, doors, ladders, items) stay with Elden Ring.
+            // Attacks, rolls, jumps and items are Minecraft's now; Elden Ring's interact (graces,
+            // doors, ladders, items) stays with Elden Ring.
             block_actions(&mut player.chr_ins.modules.action_request.disabled_action_inputs, true);
-            self.written_global = Some(coords::global_from_mc(target_mc));
+            self.written_global = Some(coords::global_from_mc(self.walker.pos));
             self.driving = true;
         } else {
             self.release(Some(&mut *player));
         }
 
-        self.input.poll(link, mc_ready, (mc.flags & MC_SCREEN_OPEN) != 0);
+        // Minecraft's player is wherever ours is: the walker's position while we drive, Elden Ring's
+        // own otherwise (ladders, the first seconds on a map).
+        let here = if self.driving { self.walker.pos } else { feet };
+        let on_ground = !self.driving || self.walker.on_ground;
+        sky.flags = SKY_IN_GAME | EC_FOLLOW | if on_ground { EC_ON_GROUND } else { 0 };
+        sky.world_id = world_id;
+        sky.teleport_seq = self.teleport_seq;
+        sky.collision_epoch = self.collision.epoch;
+        sky.pos_x = here[0];
+        sky.pos_y = here[1];
+        sky.pos_z = here[2];
+        sky.yaw = yaw;
+        sky.pitch = pitch;
+        link.write_sky_state(&sky);
+
+        let er_ground = collision::ground_below(&frame, player, feet[0], feet[2], feet[1] + 1.5, 6.0);
+        if let Some(g) = er_ground {
+            self.collision.fallback_y = Some(g);
+        }
         self.collision.step(link, &frame, player, feet);
         self.blocks.drain(link);
 
@@ -319,21 +332,19 @@ impl State {
             player.chr_ins.chr_flags1c5.set_enable_render(true);
             self.hid_model = false;
         }
+        if mc_ready {
+            self.hud.update(link, mc.gui_scale);
+        }
+        self.hud.publish(mc_ready);
         let selection = link.read_world_entities_head().and_then(|w| {
             (w.has_selection != 0).then_some((w.sel_min, w.sel_max))
         });
         let drawn = match unsafe { RendMan::instance_mut() } {
             Ok(rend) => {
                 let ez = &mut *rend.debug_ez_draw;
-                let at = if mc_ready { [mc.x, mc.y, mc.z] } else { feet };
+                let at = here;
                 if show_steve {
                     self.blocks.draw_avatar(ez, &frame, at);
-                }
-                if mc_ready {
-                    self.hud.update(link, mc.gui_scale);
-                    if let Some((m, fov, aspect)) = cam {
-                        self.hud.draw(ez, m, fov, aspect);
-                    }
                 }
                 self.blocks.draw(ez, &frame, at, selection)
             }
@@ -359,6 +370,7 @@ impl State {
         }
         self.saved_gravity = None;
         self.driving = false;
+        self.walker.active = false;
         self.written_global = None;
         log!("driving: handed back to Elden Ring");
     }
@@ -376,9 +388,18 @@ impl State {
             None => "no player".into(),
         };
         log!(
-            "frame {} | {} | mc alive {} pid {} flags {:#x} ack {}/{} pos ({:.2}, {:.2}, {:.2}) | driving {} | collision epoch {} columns {} walls {} rays {}/{} | render msgs {} sections {} avatar frames {} hud frames {} quads {}",
+            "frame {} | {} | walker pos ({:.2}, {:.2}, {:.2}) vel ({:.2}, {:.2}, {:.2}) ground {} rays {} blocked {} | mc alive {} pid {} flags {:#x} ack {}/{} pos ({:.2}, {:.2}, {:.2}) | driving {} | collision epoch {} columns {} walls {} rays {}/{} | render msgs {} sections {} avatar frames {} hud frames {} quads {}",
             self.frames,
             where_,
+            self.walker.pos[0],
+            self.walker.pos[1],
+            self.walker.pos[2],
+            self.walker.vel[0],
+            self.walker.vel[1],
+            self.walker.vel[2],
+            self.walker.on_ground,
+            self.walker.rays,
+            self.walker.blocked,
             link.mc_alive(),
             link.mc_pid(),
             mc.flags,
@@ -407,11 +428,11 @@ static STATE: Mutex<Option<State>> = Mutex::new(None);
 #[unsafe(no_mangle)]
 /// # Safety
 /// Called by Windows' loader only.
-pub unsafe extern "C" fn DllMain(_hmodule: usize, reason: u32) -> bool {
+pub unsafe extern "C" fn DllMain(hmodule: usize, reason: u32) -> bool {
     if reason != 1 {
         return true;
     }
-    std::thread::spawn(|| {
+    std::thread::spawn(move || {
         log::init();
         // Any panic is written to our log before the process aborts.
         std::panic::set_hook(Box::new(|info| {
@@ -427,6 +448,8 @@ pub unsafe extern "C" fn DllMain(_hmodule: usize, reason: u32) -> bool {
             return;
         }
         std::thread::sleep(Duration::from_secs(2));
+        // Minecraft's HUD is drawn over the finished frame, pinned to the screen.
+        overlay::install(hmodule);
         log!("waiting for the game's task system");
         let cs_task = match CSTaskImp::wait_for_instance(Duration::from_secs(600)) {
             Ok(t) => t,

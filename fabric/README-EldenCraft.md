@@ -5,3 +5,6 @@ https://github.com/chasmlol/SkyCraft at commit bfcaf178524b92c2cdeb88e4ce0f13ef9
 
 EldenCraft changes (search for "EldenCraft"):
 - `AvatarExporter.textureId`: with `-Deldencraft.steveSkin=true` the player model always uses the default Steve skin.
+- Follow mode (`SkyLink.SkyState.follow()/followOnGround()`, flags 1<<8 and 1<<9 from the Elden Ring side):
+  `SkyClient.following()`, `holdUntilReady` releases at once, `EntityFollowMixin` (new) points `Entity.move` at the
+  host's position and `EntityCollideMixin` returns that exact step (`FollowStep`). Elden Ring runs the movement.

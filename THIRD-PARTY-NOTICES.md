@@ -12,5 +12,10 @@ EldenCraft contains no game files from Elden Ring or Minecraft. Players need the
 - **ModEngine2** 2.1.0 by soulsmods (MIT), bundled unmodified in `modengine2/`: starts Elden Ring offline with
   Easy Anti-Cheat off and loads the Elden Ring side. https://github.com/soulsmods/ModEngine2
 
+- **hudhook** by Andrea Venuta (MIT), built into eldencraft.dll: draws Minecraft's HUD over the game.
+  https://github.com/veeenu/hudhook — with **Dear ImGui** (MIT, Omar Cornut), **imgui-rs** (MIT OR Apache-2.0),
+  and **MinHook** (BSD-2-Clause, Tsuda Kageyu; includes Hacker Disassembler Engine, BSD-2-Clause,
+  Vyacheslav Patkov). Full texts: eldencraft/LICENSE-hudhook.txt, eldencraft/LICENSE-MinHook.txt.
+
 EldenCraft is a fan project, not affiliated with FromSoftware, Bandai Namco, Mojang or Microsoft.
 Built with AI assistance (Claude).

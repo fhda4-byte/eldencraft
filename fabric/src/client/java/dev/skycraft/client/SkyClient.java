@@ -66,6 +66,14 @@ public final class SkyClient {
 		return sky;
 	}
 
+	/**
+	 * EldenCraft follow mode: Elden Ring moves the player (Minecraft's physics numbers on Elden Ring's
+	 * real collision) and the local player goes exactly where it says, every tick (EntityFollowMixin).
+	 */
+	public static boolean following() {
+		return linked && sky.follow() && sky.inGame() && !sky.loading() && holdPos == null;
+	}
+
 	/** Start of Minecraft.runTick: pull state and input from Skyrim before anything else runs. */
 	public static void beginFrame() {
 		SkyLink.poll();
@@ -267,6 +275,12 @@ public final class SkyClient {
 			teleportPending = true;
 		}
 		if (holdPos == null) {
+			holdSince = 0;
+			return;
+		}
+		if (sky.follow() && sky.inGame() && !sky.loading()) {
+			// EldenCraft: the host already stands on its real ground; nothing to wait for.
+			holdPos = null;
 			holdSince = 0;
 			return;
 		}

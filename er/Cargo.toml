@@ -1,6 +1,6 @@
 [package]
 name = "eldencraft"
-version = "0.1.9"
+version = "0.2.0"
 edition = "2024"
 license = "MIT"
 description = "EldenCraft: play Elden Ring as a Minecraft player (Elden Ring side, loaded by ModEngine2)"
@@ -13,6 +13,9 @@ crate-type = ["cdylib"]
 # fromsoftware-rs pinned to the commit the design was read from (Ww2710 = eldenring.exe 2.7.1.0).
 eldenring = { git = "https://github.com/vswarte/fromsoftware-rs", rev = "59fbd3b3b7daaf14aca47c9f73530493dba6bc79" }
 fromsoftware-shared = { git = "https://github.com/vswarte/fromsoftware-rs", rev = "59fbd3b3b7daaf14aca47c9f73530493dba6bc79" }
+
+# Minecraft's HUD drawn over the finished frame (Dear ImGui on Elden Ring's DirectX 12 present).
+hudhook = { git = "https://github.com/veeenu/hudhook", tag = "0.9.3", default-features = false, features = ["dx12"] }
 
 [dependencies.windows-sys]
 version = "0.59"

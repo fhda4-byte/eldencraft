@@ -65,3 +65,16 @@ Pattern 2 passthrough: ER native Rust DLL (ModEngine2 external_dlls) <-> hidden 
   MC follows after; ER interact (E / triangle) left to ER, MC inventory moved to Tab / R3; ER actions blocked via
   ActionRequest.disabled_action_inputs instead of ChrDebugFlags.disabled_secondary_actions (which blocked interact).
   Stairs: cause not yet seen; asked user for a screenshot.
+
+## 2026-10-07 user (0.1.9): still falls (in a cave), poor graphics, hotbar moves with the camera
+- Root causes: (1) Minecraft moved the player against a copied height field + wall rays, which can't describe caves,
+  overhangs or stairs; (2) the HUD was drawn as a world-space plane in front of the camera (EzDraw), so it lags/moves.
+- 0.2.0 movement: Minecraft physics constants run on the Elden Ring side (er/src/walk.rs) against Elden Ring's real
+  collision with Havok rays at the player every frame (walls at 0.65/1.1/1.7 m, 3 lateral offsets, per axis; ground =
+  highest of centre + 4 corners from a step above the feet; ceiling rays when rising; snap-down 0.55 on stairs/slopes;
+  sneak stops at edges) plus Minecraft's solid blocks (REN_SOLIDS bitsets). Minecraft's player follows exactly each
+  tick: Fabric follow mode (SkyState flags 1<<8 follow, 1<<9 on ground; EntityFollowMixin points Entity.move at the
+  target and EntityCollideMixin returns the exact step), so fall damage, walk animation, hunger still work. Ladders:
+  Elden Ring climbs, Minecraft follows its position live (no teleport needed).
+- 0.2.0 HUD: hudhook 0.9.3 (DX12, MIT) draws the overlay frame as rectangles in screen pixels over the finished frame
+  (ImGui background draw list). replace_texture not used: hudhook's DX12 upload leaks an upload buffer per call.

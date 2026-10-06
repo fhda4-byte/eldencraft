@@ -79,7 +79,7 @@
       "id": "movement",
       "milestone": 1,
       "side": "er",
-      "summary": "Each frame after physics, place the Tarnished at Minecraft's interpolated feet and yaw; disable ER gravity while driving",
+      "summary": "v0.2: Minecraft's movement rules run on the Elden Ring side (walk.rs): walk 4.317, sprint 5.612, sneak 1.295 b/s, 1.25-block jump, gravity 0.08/tick with 0.98 drag, 0.6-block step, 0.6x1.8 box; collision is Elden Ring's real map (Havok rays at the player every frame: walls at 0.65/1.1/1.7 m, ground centre+corners, ceiling) plus Minecraft's solid blocks (REN_SOLIDS). The Tarnished is placed there; Minecraft's player follows every tick (Fabric follow mode, EC_FOLLOW flag).",
       "reads": [
         "proto.McState"
       ],
@@ -126,7 +126,7 @@
       "id": "collision",
       "milestone": 1,
       "side": "er",
-      "summary": "Send Elden Ring's ground and walls near the player to Minecraft as triangles so Minecraft physics stands on Limgrave",
+      "summary": "Send Elden Ring's ground and walls near the player to Minecraft as triangles so Minecraft physics stands on Limgrave (v0.2: no longer used for movement; Minecraft still uses it to aim block placing on Elden Ring ground.)",
       "reads": [
         "er.havok_raycast"
       ],
@@ -171,7 +171,7 @@
       "id": "hud_overlay",
       "milestone": 2,
       "side": "er",
-      "summary": "Show Minecraft's HUD, hotbar, inventory screens and held item (overlay frame) over Elden Ring; hide ER's own HUD",
+      "summary": "v0.2: Minecraft's overlay frame -> flat rectangles in screen pixels, drawn over the finished frame with Dear ImGui (hudhook, DX12 present hook): pinned, pixel-sharp, never moves with the camera.",
       "reads": [
         "proto.Overlay"
       ],

@@ -76,6 +76,8 @@ pub struct Input {
     dpad_right: bool,
     dpad_left: bool,
     pub pad_active: bool,
+    /// Everything held this frame (keyboard and controller), for the movement controller.
+    held: HashMap<(u16, u16), bool>,
 }
 
 fn pad_state() -> Option<Vec<bool>> {
@@ -137,6 +139,7 @@ impl Input {
             dpad_right: false,
             dpad_left: false,
             pad_active: false,
+            held: HashMap::new(),
         }
     }
 
@@ -145,6 +148,22 @@ impl Input {
         if was != down {
             self.sent.insert((kind, code), down);
             link.push_input(kind, code, down as i32, 0, 0);
+        }
+    }
+
+    fn is_held(&self, kind: u16, code: u16) -> bool {
+        self.held.get(&(kind, code)).copied().unwrap_or(false)
+    }
+
+    /// Movement keys held this frame: W/S/A/D, Space, Ctrl, Shift (or the controller's equivalents).
+    pub fn movement(&self) -> crate::walk::MoveInput {
+        let k = |c| self.is_held(IN_KEY, c) as i32 as f64;
+        crate::walk::MoveInput {
+            forward: k(26) - k(22),
+            strafe: k(7) - k(4),
+            jump: self.is_held(IN_KEY, 44),
+            sprint: self.is_held(IN_KEY, 224),
+            sneak: self.is_held(IN_KEY, 225),
         }
     }
 
@@ -159,6 +178,7 @@ impl Input {
                 self.sent.clear();
             }
             self.focused = false;
+            self.held.clear();
             return;
         }
         self.focused = true;
@@ -207,8 +227,9 @@ impl Input {
                 self.dpad_left = left;
             }
         }
-        for ((kind, code), down) in wanted {
+        for (&(kind, code), &down) in &wanted {
             self.set(link, kind, code, down);
         }
+        self.held = if text_mode { HashMap::new() } else { wanted };
     }
 }

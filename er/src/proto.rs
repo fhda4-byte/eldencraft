@@ -236,6 +236,7 @@ pub const REN_SECTION: u32 = 2;
 pub const REN_CLEAR_ALL: u32 = 3;
 pub const REN_ATLAS_REGION: u32 = 7;
 pub const REN_TEXTURE: u32 = 4;
+pub const REN_SOLIDS: u32 = 10;
 pub const REN_AVATAR: u32 = 5;
 
 #[repr(C)]

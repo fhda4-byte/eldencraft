@@ -214,6 +214,16 @@ public final class SkyLink {
 		public boolean loading() {
 			return (this.flags & SKY_LOADING) != 0;
 		}
+
+		/** EldenCraft: the host moves the player (Minecraft physics on its own collision); follow it. */
+		public boolean follow() {
+			return (this.flags & (1 << 8)) != 0;
+		}
+
+		/** EldenCraft: the followed position is standing on the ground. */
+		public boolean followOnGround() {
+			return (this.flags & (1 << 9)) != 0;
+		}
 	}
 
 	/** Seqlock read of SkyState into {@code out}. Returns false if the link is down. */

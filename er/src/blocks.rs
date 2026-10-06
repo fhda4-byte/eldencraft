@@ -60,6 +60,8 @@ pub struct Blocks {
     atlas_h: u32,
     atlas: Vec<u8>,
     sections: HashMap<(i32, i32, i32), Vec<Tri>>,
+    /// Which blocks of each section are solid (bit x + 16z + 256y), for the movement controller.
+    solids: HashMap<(i32, i32, i32), Vec<u8>>,
     pub messages: u64,
 }
 
@@ -183,6 +185,7 @@ impl Blocks {
             atlas_h: 0,
             atlas: Vec::new(),
             sections: HashMap::new(),
+            solids: HashMap::new(),
             messages: 0,
         }
     }
@@ -212,7 +215,7 @@ impl Blocks {
     pub fn drain(&mut self, link: &Link) {
         let mut msgs: Vec<(u32, Vec<u8>)> = Vec::new();
         link.drain_render(DRAIN_BYTES_PER_FRAME, |kind, payload| {
-            if matches!(kind, REN_ATLAS | REN_SECTION | REN_CLEAR_ALL | REN_ATLAS_REGION | REN_TEXTURE | REN_AVATAR) {
+            if matches!(kind, REN_ATLAS | REN_SECTION | REN_CLEAR_ALL | REN_ATLAS_REGION | REN_TEXTURE | REN_AVATAR | REN_SOLIDS) {
                 msgs.push((kind, payload.to_vec()));
             }
         });
@@ -230,7 +233,22 @@ impl Blocks {
                     }
                 }
                 REN_ATLAS_REGION => {} // animated textures: not needed for flat colours
-                REN_CLEAR_ALL => self.sections.clear(),
+                REN_CLEAR_ALL => {
+                    self.sections.clear();
+                    self.solids.clear();
+                }
+                REN_SOLIDS => {
+                    let (Some(sx), Some(sy), Some(sz), Some(count)) =
+                        (read::<i32>(&p, 0), read::<i32>(&p, 4), read::<i32>(&p, 8), read::<u32>(&p, 12))
+                    else {
+                        continue;
+                    };
+                    if count == 0 || p.len() < 16 + 512 {
+                        self.solids.remove(&(sx, sy, sz));
+                    } else {
+                        self.solids.insert((sx, sy, sz), p[16..16 + 512].to_vec());
+                    }
+                }
                 REN_TEXTURE => {
                     let Some(t) = read::<RenTexture>(&p, 0) else { continue };
                     let bytes = t.width as usize * t.height as usize * 4;
@@ -338,6 +356,15 @@ impl Blocks {
                 _ => {}
             }
         }
+    }
+
+    /// Is the Minecraft block at (x, y, z) solid (placed by the player)?
+    pub fn is_solid(&self, x: i32, y: i32, z: i32) -> bool {
+        let key = (x.div_euclid(16), y.div_euclid(16), z.div_euclid(16));
+        let Some(bits) = self.solids.get(&key) else { return false };
+        let (lx, ly, lz) = (x.rem_euclid(16) as usize, y.rem_euclid(16) as usize, z.rem_euclid(16) as usize);
+        let bit = lx + 16 * lz + 256 * ly;
+        bits[bit / 8] & (1 << (bit % 8)) != 0
     }
 
     pub fn has_avatar(&self) -> bool {
