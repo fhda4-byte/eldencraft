@@ -53,3 +53,4 @@ Pattern 2 passthrough: ER native Rust DLL (ModEngine2 external_dlls) <-> hidden 
 - "Jump too high, above the map": our ground guard cast from mc.y+3 hit arches/ledges overhead and teleported the
   player up onto them (log: guard ... ground 9.76 / 14.59, then y 19-27). 0.1.5 replaces it with a void rescue
   (airborne > 2.5 s and > 30 blocks under last standing spot -> back to it).
+- 0.1.6: user asked to remove the safety net entirely: no guard, no rescue. Only Elden Ring's own teleports (grace travel, loading) still move Minecraft's player.

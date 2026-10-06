@@ -27,10 +27,6 @@ use proto::*;
 const TELEPORT_METRES: f64 = 6.0;
 /// After a map loads, wait this long before Minecraft takes the player (the game settles it first).
 const SETTLE: Duration = Duration::from_secs(3);
-/// A fall longer than this, deeper than RESCUE_DROP blocks under where the player last stood, is a fall
-/// through the world: put them back.
-const RESCUE_AFTER: Duration = Duration::from_millis(2500);
-const RESCUE_DROP: f64 = 30.0;
 
 struct State {
     link: Option<link::Link>,
@@ -48,8 +44,6 @@ struct State {
     settled_since: Option<Instant>,
     last_f5: Option<Instant>,
     hid_model: bool,
-    last_stood: Option<[f64; 3]>,
-    airborne_since: Option<Instant>,
     teleport_to: Option<[f64; 3]>,
     last_report: Instant,
     frames: u64,
@@ -73,8 +67,6 @@ impl State {
             settled_since: None,
             last_f5: None,
             hid_model: false,
-            last_stood: None,
-            airborne_since: None,
             teleport_to: None,
             last_report: Instant::now(),
             frames: 0,
@@ -218,26 +210,6 @@ impl State {
         let er_ground = collision::ground_below(&frame, player, feet[0], feet[2], feet[1] + 1.5, 6.0);
         if let Some(g) = er_ground {
             self.collision.fallback_y = Some(g);
-        }
-        // Void rescue: only a long fall counts (a gap in the collision we streamed), never a ledge or
-        // arch overhead. Back to the last place Minecraft's player stood.
-        if mc_ready {
-            if (mc.flags & MC_ON_GROUND) != 0 {
-                self.last_stood = Some([mc.x, mc.y, mc.z]);
-                self.airborne_since = None;
-            } else {
-                let since = *self.airborne_since.get_or_insert_with(Instant::now);
-                if let Some(stood) = self.last_stood {
-                    if since.elapsed() > RESCUE_AFTER && mc.y < stood[1] - RESCUE_DROP {
-                        log!("rescue: fell from y {:.2} to {:.2}: back to where the player last stood", stood[1], mc.y);
-                        self.teleport_seq += 1;
-                        self.teleport_to = Some([stood[0], stood[1] + 0.05, stood[2]]);
-                        self.collision.redo_around(stood);
-                        self.airborne_since = None;
-                        mc_ready = false;
-                    }
-                }
-            }
         }
         if mc_ready {
             let target_mc = [mc.x, mc.y, mc.z];
