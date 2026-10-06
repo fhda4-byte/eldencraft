@@ -1,17 +1,40 @@
 {
   "sheet": "systems",
   "about": "Every game system the mashup touches. One row = one module of the Elden Ring DLL (er/) or the Minecraft side (fabric/). 'verified' is only true once seen working in the running game.",
-  "columns": ["id", "milestone", "side", "summary", "reads", "writes", "hooks", "protocol", "source", "test", "verified"],
+  "columns": [
+    "id",
+    "milestone",
+    "side",
+    "summary",
+    "reads",
+    "writes",
+    "hooks",
+    "protocol",
+    "source",
+    "test",
+    "verified"
+  ],
   "rows": [
     {
       "id": "link",
       "milestone": 1,
       "side": "er",
       "summary": "Create the shared-memory mapping, heartbeat, watchdog when Minecraft dies",
-      "reads": ["proto.McState"],
-      "writes": ["proto.Header", "proto.SkyState"],
-      "hooks": ["boot_gate"],
-      "protocol": ["Header", "SkyState", "McState"],
+      "reads": [
+        "proto.McState"
+      ],
+      "writes": [
+        "proto.Header",
+        "proto.SkyState"
+      ],
+      "hooks": [
+        "boot_gate"
+      ],
+      "protocol": [
+        "Header",
+        "SkyState",
+        "McState"
+      ],
       "source": "port of SkyCraft skse/src/Link.cpp",
       "test": "DLL log shows mcPid and both heartbeats advancing",
       "verified": false
@@ -23,8 +46,12 @@
       "summary": "Start the bundled Prism instance hidden if no Minecraft with the mod is running; quit it when Elden Ring closes",
       "reads": [],
       "writes": [],
-      "hooks": ["boot_gate"],
-      "protocol": ["Header"],
+      "hooks": [
+        "boot_gate"
+      ],
+      "protocol": [
+        "Header"
+      ],
       "source": "port of SkyCraft skse/src/Launcher.cpp",
       "test": "Press Play in Melty: Minecraft process appears with no window; closing ER closes it",
       "verified": false
@@ -35,10 +62,16 @@
       "side": "er",
       "summary": "Forward keyboard and mouse to Minecraft's input ring; blank them for Elden Ring while Minecraft drives",
       "reads": [],
-      "writes": ["proto.InputRing"],
-      "hooks": ["dinput_get_device_state"],
-      "protocol": ["InputRing"],
-      "source": "SkyCraft Input.cpp logic; ER DirectInput hook per field note",
+      "writes": [
+        "proto.InputRing"
+      ],
+      "hooks": [
+        "dinput_get_device_state"
+      ],
+      "protocol": [
+        "InputRing"
+      ],
+      "source": "er/src/input.rs: GetAsyncKeyState polling -> SDL scancodes; ER actions off via ChrDebugFlags.disabled_secondary_actions (movement left on for run animation)",
       "test": "WASD/space/mouse move the Minecraft player; ER character does not also roll/attack",
       "verified": false
     },
@@ -47,10 +80,23 @@
       "milestone": 1,
       "side": "er",
       "summary": "Each frame after physics, place the Tarnished at Minecraft's interpolated feet and yaw; disable ER gravity while driving",
-      "reads": ["proto.McState"],
-      "writes": ["er.player_position", "er.player_yaw", "er.gravity_off"],
-      "hooks": ["after_physics", "player_ins", "chr_physics_module"],
-      "protocol": ["McState", "SkyState"],
+      "reads": [
+        "proto.McState"
+      ],
+      "writes": [
+        "er.player_position",
+        "er.player_yaw",
+        "er.gravity_off"
+      ],
+      "hooks": [
+        "after_physics",
+        "player_ins",
+        "chr_physics_module"
+      ],
+      "protocol": [
+        "McState",
+        "SkyState"
+      ],
       "source": "CS2-in-ER field note (position write + gravity_multiplier=0)",
       "test": "Walk/sprint/jump in Limgrave with Minecraft speeds; no fall death on landing",
       "verified": false
@@ -59,11 +105,19 @@
       "id": "camera",
       "milestone": 1,
       "side": "er",
-      "summary": "Drive Elden Ring's camera from Minecraft's eye position, yaw, pitch, FOV and F5 mode",
-      "reads": ["proto.McState"],
-      "writes": ["er.camera_pose"],
-      "hooks": ["camera_update"],
-      "protocol": ["McState"],
+      "summary": "First version: Elden Ring's own camera stays; its forward vector is Minecraft's look (SkyState yaw/pitch is authoritative in SkyCraft's mod)",
+      "reads": [
+        "proto.McState"
+      ],
+      "writes": [
+        "er.camera_pose"
+      ],
+      "hooks": [
+        "camera_read"
+      ],
+      "protocol": [
+        "McState"
+      ],
       "source": "new; needs RE of CSCam / ChrCam",
       "test": "Mouse look matches Minecraft; first person shows no ER body",
       "verified": false
@@ -73,10 +127,19 @@
       "milestone": 1,
       "side": "er",
       "summary": "Send Elden Ring's ground and walls near the player to Minecraft as triangles so Minecraft physics stands on Limgrave",
-      "reads": ["er.havok_raycast"],
-      "writes": ["proto.CollisionRing"],
-      "hooks": ["cast_ray"],
-      "protocol": ["CollisionRing", "SkyState"],
+      "reads": [
+        "er.havok_raycast"
+      ],
+      "writes": [
+        "proto.CollisionRing"
+      ],
+      "hooks": [
+        "cast_ray"
+      ],
+      "protocol": [
+        "CollisionRing",
+        "SkyState"
+      ],
       "source": "SkyCraft Collision.cpp format; ER triangles from a ray-cast grid (first version)",
       "test": "Minecraft player walks up Limgrave slopes, cannot pass cliffs/walls",
       "verified": false
@@ -86,11 +149,21 @@
       "milestone": 2,
       "side": "er",
       "summary": "Draw Minecraft's block sections and atlas inside Elden Ring's D3D12 frame, depth-tested against the scene",
-      "reads": ["proto.RenderRing", "proto.WorldEntities"],
-      "writes": ["er.d3d12_draws"],
-      "hooks": ["d3d12_present", "scene_depth_copy"],
-      "protocol": ["RenderRing", "WorldEntities"],
-      "source": "port of SkyCraft WorldRender.cpp from D3D11 to D3D12",
+      "reads": [
+        "proto.RenderRing",
+        "proto.WorldEntities"
+      ],
+      "writes": [
+        "er.d3d12_draws"
+      ],
+      "hooks": [
+        "ez_draw"
+      ],
+      "protocol": [
+        "RenderRing",
+        "WorldEntities"
+      ],
+      "source": "er/src/blocks.rs: first version draws Minecraft's section meshes with CSEzDraw flat-coloured triangles (atlas texel x tint x face shade); D3D12 textured renderer later",
       "test": "Placed block sits on the ground, stays put as the camera moves, hidden behind ER rocks",
       "verified": false
     },
@@ -99,10 +172,21 @@
       "milestone": 2,
       "side": "er",
       "summary": "Show Minecraft's HUD, hotbar, inventory screens and held item (overlay frame) over Elden Ring; hide ER's own HUD",
-      "reads": ["proto.Overlay"],
-      "writes": ["er.d3d12_draws", "er.hud_hidden"],
-      "hooks": ["d3d12_present", "ui_states"],
-      "protocol": ["OverlayCtl", "Overlay"],
+      "reads": [
+        "proto.Overlay"
+      ],
+      "writes": [
+        "er.d3d12_draws",
+        "er.hud_hidden"
+      ],
+      "hooks": [
+        "d3d12_present",
+        "ui_states"
+      ],
+      "protocol": [
+        "OverlayCtl",
+        "Overlay"
+      ],
       "source": "port of SkyCraft Overlay.cpp to D3D12",
       "test": "Hotbar, hearts, hunger visible; E opens inventory; ER HUD gone",
       "verified": false
@@ -115,8 +199,11 @@
       "reads": [],
       "writes": [],
       "hooks": [],
-      "protocol": ["RenderRing", "WorldEntities"],
-      "source": "SkyCraft Fabric mod unchanged",
+      "protocol": [
+        "RenderRing",
+        "WorldEntities"
+      ],
+      "source": "SkyCraft Fabric mod unchanged (bundled jar)",
       "test": "Mine a placed block, it drops and is picked up into the hotbar",
       "verified": false
     },
@@ -128,7 +215,9 @@
       "reads": [],
       "writes": [],
       "hooks": [],
-      "protocol": ["RenderRing"],
+      "protocol": [
+        "RenderRing"
+      ],
       "source": "deferred: not in first version (risk called out to user)",
       "test": "n/a in first version",
       "verified": false
@@ -138,10 +227,18 @@
       "milestone": 3,
       "side": "er",
       "summary": "Publish nearby Elden Ring enemies (position, size, HP, hostility) so Minecraft mirrors them as hittable proxies",
-      "reads": ["er.world_chr_man"],
-      "writes": ["proto.ActorTable"],
-      "hooks": ["world_chr_man"],
-      "protocol": ["ActorTable"],
+      "reads": [
+        "er.world_chr_man"
+      ],
+      "writes": [
+        "proto.ActorTable"
+      ],
+      "hooks": [
+        "world_chr_man"
+      ],
+      "protocol": [
+        "ActorTable"
+      ],
       "source": "SkyCraft Combat.cpp format; ER chr list per field note",
       "test": "Minecraft crosshair targets a Limgrave soldier",
       "verified": false
@@ -151,10 +248,20 @@
       "milestone": 3,
       "side": "er",
       "summary": "Minecraft hits (sword, axe, arrow) damage the Elden Ring enemy and play its hit reaction",
-      "reads": ["proto.EventRing"],
-      "writes": ["er.chr_hp", "er.hit_reaction"],
-      "hooks": ["world_chr_man", "spawn_bullet"],
-      "protocol": ["EventRing"],
+      "reads": [
+        "proto.EventRing"
+      ],
+      "writes": [
+        "er.chr_hp",
+        "er.hit_reaction"
+      ],
+      "hooks": [
+        "world_chr_man",
+        "spawn_bullet"
+      ],
+      "protocol": [
+        "EventRing"
+      ],
       "source": "field note: spawn engine bullet at target so the game does the hit",
       "test": "Diamond sword kills a soldier in the expected number of hits; it staggers",
       "verified": false
@@ -164,10 +271,20 @@
       "milestone": 3,
       "side": "er",
       "summary": "Elden Ring attacks that hit the Tarnished become Minecraft damage; Minecraft death kills the Tarnished",
-      "reads": ["er.player_hp_delta"],
-      "writes": ["proto.InputRing.kInHurt", "er.player_dead"],
-      "hooks": ["player_ins"],
-      "protocol": ["InputRing", "EventRing"],
+      "reads": [
+        "er.player_hp_delta"
+      ],
+      "writes": [
+        "proto.InputRing.kInHurt",
+        "er.player_dead"
+      ],
+      "hooks": [
+        "player_ins"
+      ],
+      "protocol": [
+        "InputRing",
+        "EventRing"
+      ],
       "source": "SkyCraft kInHurt mapping; ER HP delta watch",
       "test": "Soldier hit removes Minecraft hearts; at 0 hearts the YOU DIED flow plays",
       "verified": false

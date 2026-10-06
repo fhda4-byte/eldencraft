@@ -1,19 +1,146 @@
 {
   "sheet": "hooks",
   "about": "Every place the Elden Ring DLL touches the game. Target: eldenring.exe 2.7.1.0 (1.17.1) on this PC. 'found' = located in code/crate; 'verified' = seen working in the running game.",
-  "columns": ["id", "what", "how", "provider", "game_version", "found", "verified", "notes"],
+  "columns": [
+    "id",
+    "what",
+    "how",
+    "provider",
+    "game_version",
+    "found",
+    "verified",
+    "notes"
+  ],
   "rows": [
-    {"id": "boot_gate", "what": "Wait until the game window exists and reflection singletons resolve before touching game state", "how": "poll window + fresh singleton scan", "provider": "fromsoftware-rs", "game_version": "2.7.1.0", "found": true, "verified": false, "notes": "field note gotchas 1-2: use reflection name CSTask, never scan from DllMain"},
-    {"id": "player_ins", "what": "The local player: position, block position, HP, death", "how": "WorldChrMan main player", "provider": "fromsoftware-rs", "game_version": "2.7.1.0", "found": true, "verified": false, "notes": ""},
-    {"id": "chr_physics_module", "what": "Write position, orientation, proxy-update flag; gravity_multiplier / gravity_disabled", "how": "CSChrPhysicsModule fields", "provider": "fromsoftware-rs", "game_version": "2.7.1.0", "found": true, "verified": false, "notes": "field note: gravity must be 0 while we drive or a scripted fall death fires"},
-    {"id": "after_physics", "what": "A per-frame callback after character physics, to apply the Minecraft pose", "how": "CSTask registration at a post-physics task group", "provider": "fromsoftware-rs", "game_version": "2.7.1.0", "found": true, "verified": false, "notes": "exact task group to confirm in game"},
-    {"id": "dinput_get_device_state", "what": "Read and blank keyboard/mouse for the game", "how": "hook IDirectInputDevice8::GetDeviceState", "provider": "native (MinHook-style detour)", "game_version": "any", "found": true, "verified": false, "notes": "field note: game uses GetDeviceState only"},
-    {"id": "camera_update", "what": "Override the gameplay camera pose and FOV", "how": "TBD: CSCamera / ChrCam write after its update", "provider": "needs reverse engineering", "game_version": "2.7.1.0", "found": false, "verified": false, "notes": "open item; first fallback: keep ER third-person camera, rotate player yaw from Minecraft"},
-    {"id": "cast_ray", "what": "Ray casts against map collision near the player", "how": "CSPhysWorld::cast_ray, filter 0x2000058", "provider": "fromsoftware-rs", "game_version": "2.7.1.0", "found": true, "verified": false, "notes": "map re-basing shifts Havok coords: resync on warp"},
-    {"id": "d3d12_present", "what": "Draw our geometry and overlay inside the game's frame", "how": "hudhook DX12 pre-ImGui / post-ImGui hooks (patched as in field note)", "provider": "hudhook 0.9.3 (vendored, patched)", "game_version": "any", "found": true, "verified": false, "notes": "field note gotcha 10"},
-    {"id": "scene_depth_copy", "what": "Copy scene depth (D32_FLOAT_S8X24, reversed Z) to occlude our 3D draws", "how": "at the first ClearDepthStencilView of the main DSV each frame", "provider": "native D3D12 hook", "game_version": "2.7.1.0", "found": true, "verified": false, "notes": "fall back to last copy on alt-tab (gotcha 9)"},
-    {"id": "ui_states", "what": "Which ER menu is open; hide ER HUD", "how": "CSMenuManImp.ui_states", "provider": "fromsoftware-rs", "game_version": "2.7.1.0", "found": true, "verified": false, "notes": "HUD hiding method TBD"},
-    {"id": "world_chr_man", "what": "Nearby enemies: position, HP, team, last_hit_by", "how": "WorldChrMan chr_inses_by_distance", "provider": "fromsoftware-rs", "game_version": "2.7.1.0", "found": true, "verified": false, "notes": "distance field is relative, not metres"},
-    {"id": "spawn_bullet", "what": "Make an engine hit on an enemy so ER does damage, reactions and sounds", "how": "CSBulletManager::spawn_bullet with our regulation rows", "provider": "fromsoftware-rs, vanilla bullet rows only", "game_version": "2.7.1.0", "found": true, "verified": false, "notes": "no edited regulation.bin: shipping one would redistribute a game file and one-click can't rebuild it. Use vanilla rows (throwing-dagger family) + direct HP write for the exact Minecraft damage; bullet life >= 2 frames (gotcha 7)"}
+    {
+      "id": "boot_gate",
+      "what": "Wait until the game window exists and reflection singletons resolve before touching game state",
+      "how": "poll window + fresh singleton scan",
+      "provider": "fromsoftware-rs",
+      "game_version": "2.7.1.0",
+      "found": true,
+      "verified": false,
+      "notes": "field note gotchas 1-2: use reflection name CSTask, never scan from DllMain"
+    },
+    {
+      "id": "player_ins",
+      "what": "The local player: position, block position, HP, death",
+      "how": "WorldChrMan main player",
+      "provider": "fromsoftware-rs",
+      "game_version": "2.7.1.0",
+      "found": true,
+      "verified": false,
+      "notes": ""
+    },
+    {
+      "id": "chr_physics_module",
+      "what": "Write position, orientation, proxy-update flag; gravity_multiplier / gravity_disabled",
+      "how": "CSChrPhysicsModule fields",
+      "provider": "fromsoftware-rs",
+      "game_version": "2.7.1.0",
+      "found": true,
+      "verified": false,
+      "notes": "field note: gravity must be 0 while we drive or a scripted fall death fires"
+    },
+    {
+      "id": "after_physics",
+      "what": "A per-frame callback after character physics, to apply the Minecraft pose",
+      "how": "CSTask registration at a post-physics task group",
+      "provider": "fromsoftware-rs",
+      "game_version": "2.7.1.0",
+      "found": true,
+      "verified": false,
+      "notes": "exact task group to confirm in game"
+    },
+    {
+      "id": "dinput_get_device_state",
+      "what": "Read and blank keyboard/mouse for the game",
+      "how": "hook IDirectInputDevice8::GetDeviceState",
+      "provider": "native (MinHook-style detour)",
+      "game_version": "any",
+      "found": true,
+      "verified": false,
+      "notes": "field note: game uses GetDeviceState only"
+    },
+    {
+      "id": "cast_ray",
+      "what": "Ray casts against map collision near the player",
+      "how": "CSPhysWorld::cast_ray, filter 0x2000058",
+      "provider": "fromsoftware-rs",
+      "game_version": "2.7.1.0",
+      "found": true,
+      "verified": false,
+      "notes": "map re-basing shifts Havok coords: resync on warp"
+    },
+    {
+      "id": "d3d12_present",
+      "what": "Draw our geometry and overlay inside the game's frame",
+      "how": "hudhook DX12 pre-ImGui / post-ImGui hooks (patched as in field note)",
+      "provider": "hudhook 0.9.3 (vendored, patched)",
+      "game_version": "any",
+      "found": true,
+      "verified": false,
+      "notes": "field note gotcha 10"
+    },
+    {
+      "id": "scene_depth_copy",
+      "what": "Copy scene depth (D32_FLOAT_S8X24, reversed Z) to occlude our 3D draws",
+      "how": "at the first ClearDepthStencilView of the main DSV each frame",
+      "provider": "native D3D12 hook",
+      "game_version": "2.7.1.0",
+      "found": true,
+      "verified": false,
+      "notes": "fall back to last copy on alt-tab (gotcha 9)"
+    },
+    {
+      "id": "ui_states",
+      "what": "Which ER menu is open; hide ER HUD",
+      "how": "CSMenuManImp.ui_states",
+      "provider": "fromsoftware-rs",
+      "game_version": "2.7.1.0",
+      "found": true,
+      "verified": false,
+      "notes": "HUD hiding method TBD"
+    },
+    {
+      "id": "world_chr_man",
+      "what": "Nearby enemies: position, HP, team, last_hit_by",
+      "how": "WorldChrMan chr_inses_by_distance",
+      "provider": "fromsoftware-rs",
+      "game_version": "2.7.1.0",
+      "found": true,
+      "verified": false,
+      "notes": "distance field is relative, not metres"
+    },
+    {
+      "id": "spawn_bullet",
+      "what": "Make an engine hit on an enemy so ER does damage, reactions and sounds",
+      "how": "CSBulletManager::spawn_bullet with our regulation rows",
+      "provider": "fromsoftware-rs, vanilla bullet rows only",
+      "game_version": "2.7.1.0",
+      "found": true,
+      "verified": false,
+      "notes": "no edited regulation.bin: shipping one would redistribute a game file and one-click can't rebuild it. Use vanilla rows (throwing-dagger family) + direct HP write for the exact Minecraft damage; bullet life >= 2 frames (gotcha 7)"
+    },
+    {
+      "id": "camera_read",
+      "what": "Read the active camera's forward vector for Minecraft's look",
+      "how": "CSCamera.pers_cam_1.matrix row 2",
+      "provider": "fromsoftware-rs",
+      "game_version": "2.7.1.0",
+      "found": true,
+      "verified": false,
+      "notes": "if look comes out reversed, the camera looks along -row2"
+    },
+    {
+      "id": "ez_draw",
+      "what": "Draw flat-coloured triangles and lines in the world",
+      "how": "RendMan.debug_ez_draw draw_triangle/draw_line",
+      "provider": "fromsoftware-rs",
+      "game_version": "2.7.1.0",
+      "found": true,
+      "verified": false,
+      "notes": "unknown whether retail renders debug draw without extra flags: first in-game check"
+    }
   ]
 }

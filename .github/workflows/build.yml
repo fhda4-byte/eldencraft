@@ -1,0 +1,70 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["sheets/**", "*.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust (stable, MSVC)
+        shell: pwsh
+        run: |
+          rustup default stable
+          rustup target add x86_64-pc-windows-msvc
+          rustc -V; cargo -V
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            er/target
+            ~/.gradle/caches
+            .tools
+          key: build-${{ runner.os }}-${{ hashFiles('er/Cargo.toml', 'tools/package.ps1') }}
+          restore-keys: build-${{ runner.os }}-
+
+      - name: Build and package
+        id: package
+        shell: pwsh
+        continue-on-error: true
+        run: ./tools/package.ps1
+
+      - name: Publish this build to the builds branch (packages + logs)
+        if: always()
+        shell: pwsh
+        run: |
+          $sha = "${{ github.sha }}"
+          $out = "$env:RUNNER_TEMP\builds"
+          New-Item -ItemType Directory $out -Force | Out-Null
+          if (Test-Path dist) { Copy-Item -Recurse dist\* $out }
+          Set-Content "$out\BUILD.txt" "commit $sha`nresult ${{ steps.package.outcome }}`nrun ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          git -C $out init -q -b builds
+          git -C $out config user.name "github-actions"
+          git -C $out config user.email "github-actions@users.noreply.github.com"
+          git -C $out add -A
+          git -C $out commit -q -m "Build of $sha (${{ steps.package.outcome }})"
+          git -C $out push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" builds
+
+      - name: Fail when the build failed
+        if: steps.package.outcome != 'success'
+        shell: pwsh
+        run: exit 1

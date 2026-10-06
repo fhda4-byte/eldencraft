@@ -1,17 +1,83 @@
 {
   "sheet": "constants",
   "about": "Numbers both sides must agree on. Each row becomes one constant in er/src/consts.rs.",
-  "columns": ["id", "value", "unit", "source", "verified"],
+  "columns": [
+    "id",
+    "value",
+    "unit",
+    "source",
+    "verified"
+  ],
   "rows": [
-    {"id": "metres_per_block", "value": 0.95, "unit": "ER metres per MC block", "source": "Tarnished ~1.7 m tall vs MC player 1.8 blocks", "verified": false},
-    {"id": "axis_map", "value": "MC(x, y, z) = (ER.x, ER.y, -ER.z) / metres_per_block", "unit": "", "source": "ER is Y-up; handedness to confirm in game", "verified": false},
-    {"id": "yaw_map", "value": "mc_yaw = 180 - degrees(er_yaw)", "unit": "degrees", "source": "to confirm in game", "verified": false},
-    {"id": "mapping_name", "value": "Local\\\\EldenCraft_v1", "unit": "", "source": "renamed from SkyCraft so both mods can coexist", "verified": false},
-    {"id": "collision_radius", "value": 24, "unit": "blocks", "source": "SkyCraft default", "verified": false},
-    {"id": "mc_version", "value": "26.3", "unit": "", "source": "SkyCraft README", "verified": false},
-    {"id": "fabric_loader", "value": ">=0.19.5", "unit": "", "source": "SkyCraft README", "verified": false},
-    {"id": "java", "value": "25", "unit": "", "source": "SkyCraft README; Prism downloads it", "verified": false},
-    {"id": "er_exe_version", "value": "2.7.1.0", "unit": "", "source": "read from user's eldenring.exe", "verified": true},
-    {"id": "damage_scale", "value": "er_damage = mc_damage * 12", "unit": "", "source": "placeholder: diamond sword (7) ~84 dmg vs Limgrave soldier ~300 HP; tune in game", "verified": false}
+    {
+      "id": "metres_per_block",
+      "value": 1.0,
+      "unit": "ER metres per MC block",
+      "source": "1 block = 1 m (Tarnished ~1.75 m vs MC player 1.8 blocks); simplest stable mapping",
+      "verified": false
+    },
+    {
+      "id": "axis_map",
+      "value": "global = tile*256 + block-local (m60/m61 overworld), else block-local; MC = (gx, gy, -gz)",
+      "unit": "metres -> blocks",
+      "source": "ER is Y-up; handedness to confirm in game",
+      "verified": false
+    },
+    {
+      "id": "yaw_map",
+      "value": "MC yaw/pitch from ER camera forward (matrix row 2) via coords::mc_look",
+      "unit": "degrees",
+      "source": "to confirm in game",
+      "verified": false
+    },
+    {
+      "id": "mapping_name",
+      "value": "EldenCraft_v1 (unprefixed = session namespace; Fabric side gets -Dskycraft.link=EldenCraft_v1)",
+      "unit": "",
+      "source": "renamed from SkyCraft so both mods can coexist",
+      "verified": false
+    },
+    {
+      "id": "collision_radius",
+      "value": 24,
+      "unit": "blocks",
+      "source": "SkyCraft default",
+      "verified": false
+    },
+    {
+      "id": "mc_version",
+      "value": "26.3",
+      "unit": "",
+      "source": "SkyCraft README",
+      "verified": false
+    },
+    {
+      "id": "fabric_loader",
+      "value": ">=0.19.5",
+      "unit": "",
+      "source": "SkyCraft README",
+      "verified": false
+    },
+    {
+      "id": "java",
+      "value": "25",
+      "unit": "",
+      "source": "SkyCraft README; Prism downloads it",
+      "verified": false
+    },
+    {
+      "id": "er_exe_version",
+      "value": "2.7.1.0",
+      "unit": "",
+      "source": "read from user's eldenring.exe",
+      "verified": true
+    },
+    {
+      "id": "damage_scale",
+      "value": "er_damage = mc_damage * 12",
+      "unit": "",
+      "source": "placeholder: diamond sword (7) ~84 dmg vs Limgrave soldier ~300 HP; tune in game",
+      "verified": false
+    }
   ]
 }
