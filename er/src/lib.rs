@@ -4,6 +4,7 @@
 //! Design and status: sheets/*.json. Every system here is a row in sheets/systems.json.
 
 mod blocks;
+mod boot;
 mod collision;
 mod coords;
 mod input;
@@ -261,8 +262,22 @@ pub unsafe extern "C" fn DllMain(_hmodule: usize, reason: u32) -> bool {
     }
     std::thread::spawn(|| {
         log::init();
-        log!("EldenCraft {} loaded", env!("CARGO_PKG_VERSION"));
-        let cs_task = match CSTaskImp::wait_for_instance(Duration::MAX) {
+        // Any panic is written to our log before the process aborts.
+        std::panic::set_hook(Box::new(|info| {
+            log!("PANIC: {info}");
+        }));
+        log!("EldenCraft {} loaded (pid {})", env!("CARGO_PKG_VERSION"), std::process::id());
+        log!("steam running: {}", boot::process_running("steam.exe"));
+        // Touch nothing in the game until its window is up (CS2-in-ER field note: early reflection
+        // and singleton scans fail or crash while the packed executable is still starting).
+        let waited = boot::wait_for_game_window(Duration::from_secs(300));
+        log!("game window: {}", if waited { "up" } else { "never appeared in 5 min" });
+        if !waited {
+            return;
+        }
+        std::thread::sleep(Duration::from_secs(2));
+        log!("waiting for the game's task system");
+        let cs_task = match CSTaskImp::wait_for_instance(Duration::from_secs(600)) {
             Ok(t) => t,
             Err(e) => {
                 log!("CSTask never came up: {e:?}");
