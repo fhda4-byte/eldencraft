@@ -2,8 +2,8 @@
 
 EldenCraft contains no game files from Elden Ring or Minecraft. Players need their own copies of both.
 
-- **SkyCraft** by chasmlol (MIT): the Minecraft mod in the bundled Minecraft is SkyCraft's Fabric mod,
-  unmodified, and the Elden Ring side speaks SkyCraft's shared-memory protocol (v11), ported to Rust.
+- **SkyCraft** by chasmlol (MIT): the Minecraft mod in the bundled Minecraft is SkyCraft's Fabric mod
+  (in `fabric/`, with small EldenCraft changes listed in fabric/README-EldenCraft.md), and the Elden Ring side speaks SkyCraft's shared-memory protocol (v11), ported to Rust.
   https://github.com/chasmlol/SkyCraft
 - **fromsoftware-rs** by vswarte and contributors (MIT OR Apache-2.0): Elden Ring structures and bindings.
   https://github.com/vswarte/fromsoftware-rs

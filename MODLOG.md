@@ -45,3 +45,11 @@ Pattern 2 passthrough: ER native Rust DLL (ModEngine2 external_dlls) <-> hidden 
 - 0.1.3: multi-origin rays (feet+2, +8, +20, +45) and hole filling, ground guard (never under ER floor: teleport MC
   back up), ignore m255 loading + 3 s settle, auto F5 + draw Steve avatar (EzDraw, skin texture colours) and hide the
   Tarnished (chr_flags1c5.enable_render) while Steve shows.
+
+## 2026-10-07 tests 3-4 (0.1.3, 0.1.4)
+- Steve shows (avatar via F5 + EzDraw). User: textures wrong (0.1.3 flat per-triangle) -> 0.1.4 per-texel quads.
+- User wants the default Steve skin, not their account skin -> fork SkyCraft fabric into fabric/ with
+  -Deldencraft.steveSkin=true (AvatarExporter.textureId maps skins/* and textures/entity/player/* to wide/steve.png).
+- "Jump too high, above the map": our ground guard cast from mc.y+3 hit arches/ledges overhead and teleported the
+  player up onto them (log: guard ... ground 9.76 / 14.59, then y 19-27). 0.1.5 replaces it with a void rescue
+  (airborne > 2.5 s and > 30 blocks under last standing spot -> back to it).

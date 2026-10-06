@@ -27,6 +27,10 @@ use proto::*;
 const TELEPORT_METRES: f64 = 6.0;
 /// After a map loads, wait this long before Minecraft takes the player (the game settles it first).
 const SETTLE: Duration = Duration::from_secs(3);
+/// A fall longer than this, deeper than RESCUE_DROP blocks under where the player last stood, is a fall
+/// through the world: put them back.
+const RESCUE_AFTER: Duration = Duration::from_millis(2500);
+const RESCUE_DROP: f64 = 30.0;
 
 struct State {
     link: Option<link::Link>,
@@ -44,7 +48,8 @@ struct State {
     settled_since: Option<Instant>,
     last_f5: Option<Instant>,
     hid_model: bool,
-    last_guard: Option<Instant>,
+    last_stood: Option<[f64; 3]>,
+    airborne_since: Option<Instant>,
     teleport_to: Option<[f64; 3]>,
     last_report: Instant,
     frames: u64,
@@ -68,7 +73,8 @@ impl State {
             settled_since: None,
             last_f5: None,
             hid_model: false,
-            last_guard: None,
+            last_stood: None,
+            airborne_since: None,
             teleport_to: None,
             last_report: Instant::now(),
             frames: 0,
@@ -213,17 +219,23 @@ impl State {
         if let Some(g) = er_ground {
             self.collision.fallback_y = Some(g);
         }
-        // Only a real fall-through counts: Minecraft's player is airborne and 2+ blocks under the
-        // surface Elden Ring has at its column (low walls and gravestones above the feet don't).
-        if mc_ready && (mc.flags & MC_ON_GROUND) == 0 && self.last_guard.map_or(true, |t| t.elapsed() > Duration::from_secs(1)) {
-            if let Some(g) = collision::ground_below(&frame, player, mc.x, mc.z, mc.y + 3.0, 40.0) {
-                if mc.y < g - 2.0 {
-                    log!("guard: Minecraft player at y {:.2} fell under Elden Ring's ground {:.2}: back up", mc.y, g);
-                    self.teleport_seq += 1;
-                    self.teleport_to = Some([mc.x, g + 0.05, mc.z]);
-                    self.collision.redo_around([mc.x, g, mc.z]);
-                    self.last_guard = Some(Instant::now());
-                    mc_ready = false;
+        // Void rescue: only a long fall counts (a gap in the collision we streamed), never a ledge or
+        // arch overhead. Back to the last place Minecraft's player stood.
+        if mc_ready {
+            if (mc.flags & MC_ON_GROUND) != 0 {
+                self.last_stood = Some([mc.x, mc.y, mc.z]);
+                self.airborne_since = None;
+            } else {
+                let since = *self.airborne_since.get_or_insert_with(Instant::now);
+                if let Some(stood) = self.last_stood {
+                    if since.elapsed() > RESCUE_AFTER && mc.y < stood[1] - RESCUE_DROP {
+                        log!("rescue: fell from y {:.2} to {:.2}: back to where the player last stood", stood[1], mc.y);
+                        self.teleport_seq += 1;
+                        self.teleport_to = Some([stood[0], stood[1] + 0.05, stood[2]]);
+                        self.collision.redo_around(stood);
+                        self.airborne_since = None;
+                        mc_ready = false;
+                    }
                 }
             }
         }

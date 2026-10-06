@@ -64,13 +64,9 @@ function Invoke-Logged([string]$name, [scriptblock]$block) {
     if ($LASTEXITCODE) { throw "$name failed (exit $LASTEXITCODE); see logs\$name.log" }
 }
 
-$skySrc = "$root\.tools\skycraft"
+$skySrc = $root  # fabric\ is SkyCraft's Fabric mod (MIT) with EldenCraft's small changes
 if (-not $NoBuild) {
     Invoke-Logged "er-build" { cargo build --release --manifest-path "$root\er\Cargo.toml" }
-    if (-not (Test-Path "$skySrc\.git")) {
-        Invoke-Logged "skycraft-clone" { git clone --quiet $skycraftRepo $skySrc }
-    }
-    Invoke-Logged "skycraft-checkout" { git -C $skySrc checkout --quiet $skycraftCommit }
     Push-Location "$skySrc\fabric"
     try {
         Invoke-Logged "fabric-build" { .\gradlew.bat build -x test --no-configuration-cache --no-daemon }
@@ -106,7 +102,7 @@ $mods = "$bundle\Prism\instances\EldenCraft\.minecraft\mods"
 New-Item -ItemType Directory $mods -Force | Out-Null
 Copy-Item "$cache\$fabricApiJar" $mods
 Copy-Item $jar.FullName "$mods\$($jar.Name)"
-Copy-Item "$skySrc\LICENSE" "$bundle\Prism\instances\EldenCraft\.minecraft\mods\SkyCraft-LICENSE.txt"
+Copy-Item "$root\fabric\LICENSE-SkyCraft" "$bundle\Prism\instances\EldenCraft\.minecraft\mods\SkyCraft-LICENSE.txt"
 Set-Content "$bundle\bundle-version.txt" "EldenCraft $version, Prism Launcher $prismVersion, $fabricApiJar, $($jar.Name) ($skycraftCommit)" -NoNewline
 New-ZipFromFolder "$dist\EldenCraft-Minecraft-$version.zip" $bundle
 Remove-Item -Recurse -Force $bundle

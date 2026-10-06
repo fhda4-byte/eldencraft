@@ -10,6 +10,6 @@ Fabric API (instances/EldenCraft/.minecraft/mods/fabric-api-*.jar)
   License: Apache License 2.0
   Source:  https://github.com/FabricMC/fabric
 
-SkyCraft Minecraft mod by chasmlol (instances/EldenCraft/.minecraft/mods/skycraft-*.jar), unmodified
+SkyCraft Minecraft mod by chasmlol (instances/EldenCraft/.minecraft/mods/skycraft-*.jar), with small EldenCraft changes
   License: MIT
   Source:  https://github.com/chasmlol/SkyCraft (commit {SKYCRAFT_COMMIT})
