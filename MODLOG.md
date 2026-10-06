@@ -78,3 +78,4 @@ Pattern 2 passthrough: ER native Rust DLL (ModEngine2 external_dlls) <-> hidden 
   Elden Ring climbs, Minecraft follows its position live (no teleport needed).
 - 0.2.0 HUD: hudhook 0.9.3 (DX12, MIT) draws the overlay frame as rectangles in screen pixels over the finished frame
   (ImGui background draw list). replace_texture not used: hudhook's DX12 upload leaks an upload buffer per call.
+- 0.2.0 built (CI 37546744017; mixin targets move/collide confirmed in 26.3 jars) and submitted to the Melty draft (release b07eec10, one click yes). Waiting for the user's Test.
