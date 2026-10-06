@@ -23,8 +23,6 @@ use fromsoftware_shared::{FromStatic, SharedTaskImpExt};
 use coords::Frame;
 use proto::*;
 
-/// Elden Ring teleports (grace travel, loading) move the player further than this in one frame.
-const TELEPORT_METRES: f64 = 6.0;
 /// After a map loads, wait this long before Minecraft takes the player (the game settles it first).
 const SETTLE: Duration = Duration::from_secs(3);
 
@@ -45,6 +43,7 @@ struct State {
     last_f5: Option<Instant>,
     hid_model: bool,
     teleport_to: Option<[f64; 3]>,
+    was_loading: bool,
     last_report: Instant,
     frames: u64,
 }
@@ -68,6 +67,7 @@ impl State {
             last_f5: None,
             hid_model: false,
             teleport_to: None,
+            was_loading: false,
             last_report: Instant::now(),
             frames: 0,
         }
@@ -99,6 +99,7 @@ impl State {
             .and_then(|w| w.main_player.as_mut())
             .map(|p| &mut **p as *mut eldenring::cs::PlayerIns);
         let Some(player_ptr) = player_ptr else {
+            self.was_loading = true;
             sky.flags = SKY_LOADING;
             sky.world_id = self.world_id;
             link.write_sky_state(&sky);
@@ -111,6 +112,7 @@ impl State {
         // While a map loads the player exists with block m255_255_255_255 and a placeholder position.
         if player.current_block_id.area() == 255 || player.current_block_id.0 == -1 {
             self.settled_since = None;
+            self.was_loading = true;
             sky.flags = SKY_LOADING;
             sky.world_id = self.world_id;
             link.write_sky_state(&sky);
@@ -144,24 +146,15 @@ impl State {
             self.teleport_seq += 1;
             self.collision.reset(link);
             self.written_global = None;
-        } else {
-            // Elden Ring moved the player itself (grace travel, a cutscene, being grabbed).
-            let reference = if self.teleport_to.is_some() {
-                None
-            } else if self.driving {
-                self.written_global
-            } else {
-                self.last_global
-            };
-            if let Some(r) = reference {
-                let d = ((global[0] - r[0]).powi(2) + (global[1] - r[1]).powi(2) + (global[2] - r[2]).powi(2)).sqrt();
-                if d > TELEPORT_METRES {
-                    log!("teleport detected ({d:.1} m): Minecraft follows");
-                    self.teleport_seq += 1;
-                    self.collision.reset(link);
-                }
-            }
+        } else if self.was_loading {
+            // Back from a loading screen (grace travel, death, a door between areas): Minecraft
+            // follows to wherever Elden Ring put the player. Nothing else moves Minecraft's player:
+            // Elden Ring pushing the character out of a wall must not lift Minecraft onto it.
+            log!("after loading: Minecraft follows to ({:.1}, {:.1}, {:.1})", global[0], global[1], global[2]);
+            self.teleport_seq += 1;
+            self.collision.reset(link);
         }
+        self.was_loading = false;
         self.last_global = Some(global);
 
         // Look direction: Elden Ring's camera is authoritative (Minecraft follows it).
@@ -306,7 +299,7 @@ impl State {
             None => "no player".into(),
         };
         log!(
-            "frame {} | {} | mc alive {} pid {} flags {:#x} ack {}/{} pos ({:.2}, {:.2}, {:.2}) | driving {} | collision epoch {} columns {} rays {}/{} | render msgs {} sections {} avatar frames {}",
+            "frame {} | {} | mc alive {} pid {} flags {:#x} ack {}/{} pos ({:.2}, {:.2}, {:.2}) | driving {} | collision epoch {} columns {} walls {} rays {}/{} | render msgs {} sections {} avatar frames {}",
             self.frames,
             where_,
             link.mc_alive(),
@@ -320,6 +313,7 @@ impl State {
             self.driving,
             self.collision.epoch,
             self.collision.columns_sent,
+            self.collision.walls,
             self.collision.rays_hit,
             self.collision.rays_hit + self.collision.rays_missed,
             self.blocks.messages,

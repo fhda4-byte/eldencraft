@@ -54,3 +54,7 @@ Pattern 2 passthrough: ER native Rust DLL (ModEngine2 external_dlls) <-> hidden 
   player up onto them (log: guard ... ground 9.76 / 14.59, then y 19-27). 0.1.5 replaces it with a void rescue
   (airborne > 2.5 s and > 30 blocks under last standing spot -> back to it).
 - 0.1.6: user asked to remove the safety net entirely: no guard, no rescue. Only Elden Ring's own teleports (grace travel, loading) still move Minecraft's player.
+- 0.1.6 test log: fell through at (-136, 13) to y -500 (hole); later MC walked into ER rock, ER pushed the character
+  out upward (+28.6 m), our distance-based "teleport detected" made MC follow onto the roof = "jumping above the map".
+- 0.1.7: walls (knee-high horizontal ray pairs per grid edge -> double-sided vertical quads in 1-block slices);
+  teleports followed only after a loading screen (no distance-based detection); 1 column per frame (more rays each).

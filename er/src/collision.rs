@@ -20,11 +20,15 @@ use crate::proto::*;
 /// Map collision filter (CS2-in-ER field note: hits map collision, not characters).
 const RAY_FILTER: u32 = 0x0200_0058;
 const RADIUS_REGIONS: i32 = 3;
-const COLUMNS_PER_FRAME: usize = 2;
+const COLUMNS_PER_FRAME: usize = 1;
 /// Ray starts above the player's feet, lowest first: the first surface found from just above the
 /// player's level wins, so floors under a roof (castles, caves) are found before the roof.
 const RAY_STARTS: [f64; 4] = [2.0, 8.0, 20.0, 45.0];
 const RAY_BELOW: f64 = 60.0; // how far under the feet a ray still looks
+/// Wall probes run this high above the higher of two neighbouring ground points (above Minecraft's
+/// 0.6-block step, under a 1-block wall's top).
+const WALL_PROBE_HEIGHT: f64 = 0.7;
+const WALL_SLICES: usize = 4;
 
 /// The walkable surface at Minecraft column (x, z) nearest above-or-below the player's level.
 pub fn ground_at(world: &CSPhysWorld, frame: &Frame, player: &PlayerIns, x: f64, z: f64, feet_y: f64) -> Option<f64> {
@@ -57,6 +61,7 @@ pub struct Collision {
     done: HashSet<(i32, i32)>,
     pending: VecDeque<(u32, Vec<u8>)>,
     pub columns_sent: u32,
+    pub walls: u32,
     pub rays_hit: u64,
     pub rays_missed: u64,
 }
@@ -77,6 +82,7 @@ impl Collision {
             done: HashSet::new(),
             pending: VecDeque::new(),
             columns_sent: 0,
+            walls: 0,
             rays_hit: 0,
             rays_missed: 0,
         }
@@ -228,6 +234,55 @@ impl Collision {
                 });
             }
         }
+        // Walls: Elden Ring's walls, rocks and fences between two neighbouring ground points, found
+        // with knee-high horizontal rays both ways. Each becomes a vertical double-sided quad in
+        // 1-block slices, so Minecraft's player can't walk through them (a height field alone
+        // turns a wall into a ramp).
+        let mut walls = 0u32;
+        for j in 0..n {
+            for i in 0..n {
+                for (di, dj) in [(1usize, 0usize), (0, 1)] {
+                    let (i2, j2) = (i + di, j + dj);
+                    if i2 >= n || j2 >= n {
+                        continue;
+                    }
+                    let (ha, hb) = (at(i, j), at(i2, j2));
+                    if ha.is_nan() || hb.is_nan() {
+                        continue;
+                    }
+                    let y = ha.max(hb) + WALL_PROBE_HEIGHT;
+                    let a = [(x0 + i as i32) as f64, y, (z0 + j as i32) as f64];
+                    let b = [(x0 + i2 as i32) as f64, y, (z0 + j2 as i32) as f64];
+                    let (pa, pb) = (frame.havok_for_mc(a), frame.havok_for_mc(b));
+                    let d = PositionDelta(pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]);
+                    let back = PositionDelta(-d.0, -d.1, -d.2);
+                    let hit = world.cast_ray(RAY_FILTER, &HavokPosition(pa[0], pa[1], pa[2], 0.0), d, player).is_some()
+                        || world.cast_ray(RAY_FILTER, &HavokPosition(pb[0], pb[1], pb[2], 0.0), back, player).is_some();
+                    if !hit {
+                        continue;
+                    }
+                    walls += 1;
+                    // The wall sits on the edge's midpoint line, perpendicular to the edge.
+                    let (mx, mz) = ((a[0] + b[0]) / 2.0, (a[2] + b[2]) / 2.0);
+                    let (hx, hz) = if di == 1 { (0.0, 0.5) } else { (0.5, 0.0) };
+                    let (p1, p2) = ([mx - hx, mz - hz], [mx + hx, mz + hz]);
+                    let base = ha.min(hb);
+                    for k in 0..WALL_SLICES {
+                        let y0 = (base + k as f64) as f32;
+                        let y1 = y0 + 1.0;
+                        let (ax, az, bx, bz) = (p1[0] as f32, p1[1] as f32, p2[0] as f32, p2[1] as f32);
+                        // two windings: solid from both sides
+                        tris.push(ColTri { v: [ax, y0, az, bx, y0, bz, bx, y1, bz], flags: 0 });
+                        tris.push(ColTri { v: [ax, y0, az, bx, y1, bz, ax, y1, az], flags: 0 });
+                        tris.push(ColTri { v: [ax, y0, az, bx, y1, bz, bx, y0, bz], flags: 0 });
+                        tris.push(ColTri { v: [ax, y0, az, ax, y1, az, bx, y1, bz], flags: 0 });
+                    }
+                    hi = hi.max(base + WALL_SLICES as f64);
+                }
+            }
+        }
+        self.walls += walls;
+
         if !lo.is_finite() {
             // No ground here: still tell Minecraft the regions around the player's height are known (empty).
             lo = feet_y;
