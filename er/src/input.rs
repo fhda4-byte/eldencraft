@@ -6,6 +6,13 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
 use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
 use windows_sys::Win32::System::Threading::GetCurrentProcessId;
 
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
+
+use eldenring::cs::UserInputKey;
+use eldenring::fd4::FD4PadManager;
+use fromsoftware_shared::FromStatic;
+
 use crate::link::Link;
 use crate::proto::*;
 
@@ -39,10 +46,45 @@ const KEYS: &[(i32, u16)] = &[
 /// (Windows virtual key, SDL mouse button).
 const BUTTONS: &[(i32, u16)] = &[(0x01, 1), (0x04, 2), (0x02, 3)];
 
+/// Elden Ring's own controls (any controller it supports: PS5 DualSense, Xbox, ...) -> Minecraft.
+/// Read through the game's input layer, so the player's Elden Ring button layout applies.
+/// (Elden Ring action, Minecraft input kind, code)
+const PAD_HOLD: &[(UserInputKey, u16, u16)] = &[
+    (UserInputKey::MoveForwards, IN_KEY, 26),  // W
+    (UserInputKey::MoveBackwards, IN_KEY, 22), // S
+    (UserInputKey::MoveLeft, IN_KEY, 4),       // A
+    (UserInputKey::MoveRight, IN_KEY, 7),      // D
+    (UserInputKey::Jump, IN_KEY, 44),          // Space: jump
+    (UserInputKey::Backstep, IN_KEY, 224),     // LCtrl: sprint (Elden Ring's dash button)
+    (UserInputKey::Crouch, IN_KEY, 225),       // LShift: sneak
+    (UserInputKey::Attack, IN_MOUSE_BUTTON, 1), // break / attack
+    (UserInputKey::Guard, IN_MOUSE_BUTTON, 3),  // place / use
+    (UserInputKey::UseItem, IN_MOUSE_BUTTON, 3),
+    (UserInputKey::EventAction, IN_KEY, 8),    // E: inventory
+];
+
+/// Keyboard/mouse in use this recently means controller mappings stay off (no double meanings).
+const KEYBOARD_GRACE: Duration = Duration::from_millis(1500);
+
 pub struct Input {
     keys_down: Vec<bool>,
     buttons_down: Vec<bool>,
     focused: bool,
+    /// What Minecraft currently has held, per (kind, code), from keyboard and controller together.
+    sent: HashMap<(u16, u16), bool>,
+    keyboard_used: Option<Instant>,
+    dpad_right: bool,
+    dpad_left: bool,
+    pub pad_active: bool,
+}
+
+fn pad_state() -> Option<Vec<bool>> {
+    let man = unsafe { FD4PadManager::instance() }.ok()?;
+    let pad = man.get_in_game_pad()?;
+    let mut v: Vec<bool> = PAD_HOLD.iter().map(|(k, _, _)| pad.poll_digital_input(*k)).collect();
+    v.push(pad.poll_digital_input(UserInputKey::SwitchRightHandArmament));
+    v.push(pad.poll_digital_input(UserInputKey::SwitchleftHandArmament));
+    Some(v)
 }
 
 fn down(vk: i32) -> bool {
@@ -86,7 +128,24 @@ fn typed_char(vk: i32, shift: bool) -> Option<char> {
 
 impl Input {
     pub fn new() -> Self {
-        Input { keys_down: vec![false; KEYS.len()], buttons_down: vec![false; BUTTONS.len()], focused: false }
+        Input {
+            keys_down: vec![false; KEYS.len()],
+            buttons_down: vec![false; BUTTONS.len()],
+            focused: false,
+            sent: HashMap::new(),
+            keyboard_used: None,
+            dpad_right: false,
+            dpad_left: false,
+            pad_active: false,
+        }
+    }
+
+    fn set(&mut self, link: &Link, kind: u16, code: u16, down: bool) {
+        let was = self.sent.get(&(kind, code)).copied().unwrap_or(false);
+        if was != down {
+            self.sent.insert((kind, code), down);
+            link.push_input(kind, code, down as i32, 0, 0);
+        }
     }
 
     /// `text_mode`: a Minecraft screen (chat, inventory) is open, so typed characters go as text too.
@@ -97,30 +156,59 @@ impl Input {
                 link.push_input(IN_RELEASE_ALL, 0, 0, 0, 0);
                 self.keys_down.iter_mut().for_each(|d| *d = false);
                 self.buttons_down.iter_mut().for_each(|d| *d = false);
+                self.sent.clear();
             }
             self.focused = false;
             return;
         }
         self.focused = true;
         let shift = down(0x10);
+        let mut wanted: HashMap<(u16, u16), bool> = HashMap::new();
+        let mut any_keyboard = false;
         for (i, &(vk, sdl)) in KEYS.iter().enumerate() {
             let now = down(vk);
-            if now != self.keys_down[i] {
-                self.keys_down[i] = now;
-                link.push_input(IN_KEY, sdl, now as i32, 0, 0);
-                if now && text_mode {
-                    if let Some(c) = typed_char(vk, shift) {
-                        link.push_input(5, 0, c as i32, 0, 0);
-                    }
+            any_keyboard |= now;
+            if now && !self.keys_down[i] && text_mode {
+                if let Some(c) = typed_char(vk, shift) {
+                    link.push_input(5, 0, c as i32, 0, 0);
                 }
             }
+            self.keys_down[i] = now;
+            *wanted.entry((IN_KEY, sdl)).or_insert(false) |= now;
         }
         for (i, &(vk, sdl)) in BUTTONS.iter().enumerate() {
             let now = down(vk);
-            if now != self.buttons_down[i] {
-                self.buttons_down[i] = now;
-                link.push_input(IN_MOUSE_BUTTON, sdl, now as i32, 0, 0);
+            any_keyboard |= now;
+            self.buttons_down[i] = now;
+            *wanted.entry((IN_MOUSE_BUTTON, sdl)).or_insert(false) |= now;
+        }
+        if any_keyboard {
+            self.keyboard_used = Some(Instant::now());
+        }
+        let keyboard_recent = self.keyboard_used.map_or(false, |t| t.elapsed() < KEYBOARD_GRACE);
+        self.pad_active = false;
+        if !keyboard_recent && !text_mode {
+            if let Some(state) = pad_state() {
+                for (k, &(_, kind, code)) in PAD_HOLD.iter().enumerate() {
+                    if state[k] {
+                        self.pad_active = true;
+                    }
+                    *wanted.entry((kind, code)).or_insert(false) |= state[k];
+                }
+                // D-pad right / left: next / previous hotbar slot (one step per press).
+                let (right, left) = (state[PAD_HOLD.len()], state[PAD_HOLD.len() + 1]);
+                if right && !self.dpad_right {
+                    link.push_input(IN_SCROLL, 0, -120, 0, 0);
+                }
+                if left && !self.dpad_left {
+                    link.push_input(IN_SCROLL, 0, 120, 0, 0);
+                }
+                self.dpad_right = right;
+                self.dpad_left = left;
             }
+        }
+        for ((kind, code), down) in wanted {
+            self.set(link, kind, code, down);
         }
     }
 }

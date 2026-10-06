@@ -58,3 +58,4 @@ Pattern 2 passthrough: ER native Rust DLL (ModEngine2 external_dlls) <-> hidden 
   out upward (+28.6 m), our distance-based "teleport detected" made MC follow onto the roof = "jumping above the map".
 - 0.1.7: walls (knee-high horizontal ray pairs per grid edge -> double-sided vertical quads in 1-block slices);
   teleports followed only after a loading screen (no distance-based detection); 1 column per frame (more rays each).
+- 0.1.8: controller support through Elden Ring's own input layer (FD4PadManager in-game pad: move/jump/dash->sprint/crouch->sneak/R1 break/L1 place/triangle inventory/d-pad hotbar); camera = Elden Ring's right stick. Keyboard use in the last 1.5 s turns pad mappings off.
