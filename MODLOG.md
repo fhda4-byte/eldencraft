@@ -34,3 +34,14 @@ Pattern 2 passthrough: ER native Rust DLL (ModEngine2 external_dlls) <-> hidden 
 - Fix (0.1.1): bundle ModEngine2 2.1.0 (MIT, sha256 8a59...00ef, same zip Melty uses) in our main zip under
   modengine2/, launch {managed}/modengine2/modengine2_launcher.exe -t er -p {game}/Game/eldenring.exe -c <abs config>.
   ME2 resolves relative external_dlls against the config folder (settings.h node_to_val).
+
+## 2026-10-07 test 2 (0.1.2): in game, but falls out of the map; no Steve
+- Fixed earlier: game closed instantly in 0.1.1 test (Steam? / early touch). 0.1.2 log: steam running true, window up,
+  task system ready, mapping created, Minecraft linked (SkyCraft "linked to Skyrim", mirror world, starter + builder kit).
+- Player was in m10_01 (Stormveil) and m18_00 (Stranded Graveyard), not the overworld.
+- Rays from feet+40 m hit only ~20% (castle roofs/inside rock) -> empty known regions -> MC player falls -> we drove the
+  Tarnished down through the floor (to y -1300). Also drove during loading (block m255_255_255_255 placeholder).
+- No Steve: avatar is only sent by MC in third person; we never drew it anyway.
+- 0.1.3: multi-origin rays (feet+2, +8, +20, +45) and hole filling, ground guard (never under ER floor: teleport MC
+  back up), ignore m255 loading + 3 s settle, auto F5 + draw Steve avatar (EzDraw, skin texture colours) and hide the
+  Tarnished (chr_flags1c5.enable_render) while Steve shows.

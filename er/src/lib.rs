@@ -25,6 +25,8 @@ use proto::*;
 
 /// Elden Ring teleports (grace travel, loading) move the player further than this in one frame.
 const TELEPORT_METRES: f64 = 6.0;
+/// After a map loads, wait this long before Minecraft takes the player (the game settles it first).
+const SETTLE: Duration = Duration::from_secs(3);
 
 struct State {
     link: Option<link::Link>,
@@ -39,6 +41,9 @@ struct State {
     written_global: Option<[f64; 3]>,
     driving: bool,
     saved_gravity: Option<f32>,
+    settled_since: Option<Instant>,
+    last_f5: Option<Instant>,
+    hid_model: bool,
     last_report: Instant,
     frames: u64,
 }
@@ -58,6 +63,9 @@ impl State {
             written_global: None,
             driving: false,
             saved_gravity: None,
+            settled_since: None,
+            last_f5: None,
+            hid_model: false,
             last_report: Instant::now(),
             frames: 0,
         }
@@ -98,6 +106,18 @@ impl State {
             return;
         };
         let player = unsafe { &mut *player_ptr };
+        // While a map loads the player exists with block m255_255_255_255 and a placeholder position.
+        if player.current_block_id.area() == 255 || player.current_block_id.0 == -1 {
+            self.settled_since = None;
+            sky.flags = SKY_LOADING;
+            sky.world_id = self.world_id;
+            link.write_sky_state(&sky);
+            self.input.poll(link, false, false);
+            self.release(Some(&mut *player));
+            self.report(link, &mc, None);
+            return;
+        }
+        let settled = *self.settled_since.get_or_insert_with(Instant::now);
 
         // Where the player is, in every space we need.
         let (havok, local, block) = {
@@ -158,7 +178,29 @@ impl State {
         link.write_sky_state(&sky);
 
         // Minecraft drives the player once it is in its world and has followed our last teleport.
-        let mc_ready = mc_alive && (mc.flags & MC_IN_WORLD) != 0 && mc.teleport_ack == self.teleport_seq;
+        let mut mc_ready = mc_alive
+            && (mc.flags & MC_IN_WORLD) != 0
+            && mc.teleport_ack == self.teleport_seq
+            && settled.elapsed() > SETTLE;
+
+        // Ground under the player, from Elden Ring's own collision: never let Minecraft pull the
+        // character under Elden Ring's floor (a gap in the collision we streamed).
+        let er_ground = collision::ground_below(&frame, player, feet[0], feet[2], feet[1] + 1.5, 6.0);
+        if let Some(g) = er_ground {
+            self.collision.fallback_y = Some(g);
+        }
+        if mc_ready {
+            let from = mc.y.max(feet[1]) + 1.5;
+            let depth = (from - mc.y) + 2.0;
+            if let Some(g) = collision::ground_below(&frame, player, mc.x, mc.z, from, depth) {
+                if mc.y < g - 0.6 {
+                    log!("guard: Minecraft player at y {:.2} is under Elden Ring's ground {:.2}: back up", mc.y, g);
+                    self.teleport_seq += 1;
+                    self.collision.redo_around([mc.x, g, mc.z]);
+                    mc_ready = false;
+                }
+            }
+        }
         if mc_ready {
             let target_mc = [mc.x, mc.y, mc.z];
             let h = frame.havok_for_mc(target_mc);
@@ -186,13 +228,34 @@ impl State {
         self.input.poll(link, mc_ready, (mc.flags & MC_SCREEN_OPEN) != 0);
         self.collision.step(link, &frame, player, feet);
         self.blocks.drain(link);
+
+        // Minecraft only sends the player model in third person: ask for it once (F5).
+        if mc_ready && mc.camera_mode == 0 && self.last_f5.map_or(true, |t| t.elapsed() > Duration::from_secs(5)) {
+            link.push_input(IN_KEY, 62, 1, 0, 0);
+            link.push_input(IN_KEY, 62, 0, 0, 0);
+            self.last_f5 = Some(Instant::now());
+            log!("asked Minecraft for third person (F5)");
+        }
+        // Steve replaces the Tarnished while Minecraft drives.
+        let show_steve = mc_ready && self.blocks.has_avatar();
+        if show_steve {
+            player.chr_ins.chr_flags1c5.set_enable_render(false);
+            self.hid_model = true;
+        } else if self.hid_model {
+            player.chr_ins.chr_flags1c5.set_enable_render(true);
+            self.hid_model = false;
+        }
         let selection = link.read_world_entities_head().and_then(|w| {
             (w.has_selection != 0).then_some((w.sel_min, w.sel_max))
         });
         let drawn = match unsafe { RendMan::instance_mut() } {
             Ok(rend) => {
                 let ez = &mut *rend.debug_ez_draw;
-                self.blocks.draw(ez, &frame, if mc_ready { [mc.x, mc.y, mc.z] } else { feet }, selection)
+                let at = if mc_ready { [mc.x, mc.y, mc.z] } else { feet };
+                if show_steve {
+                    self.blocks.draw_avatar(ez, &frame, at);
+                }
+                self.blocks.draw(ez, &frame, at, selection)
             }
             Err(_) => 0,
         };
@@ -209,6 +272,10 @@ impl State {
             phys.gravity_multiplier = self.saved_gravity.unwrap_or(1.0);
             phys.gravity_disabled = false;
             p.chr_ins.debug_flags.set_disabled_secondary_actions(false);
+            if self.hid_model {
+                p.chr_ins.chr_flags1c5.set_enable_render(true);
+                self.hid_model = false;
+            }
         }
         self.saved_gravity = None;
         self.driving = false;
@@ -229,7 +296,7 @@ impl State {
             None => "no player".into(),
         };
         log!(
-            "frame {} | {} | mc alive {} pid {} flags {:#x} ack {}/{} pos ({:.2}, {:.2}, {:.2}) | driving {} | collision epoch {} columns {} rays {}/{} | render msgs {} sections {}",
+            "frame {} | {} | mc alive {} pid {} flags {:#x} ack {}/{} pos ({:.2}, {:.2}, {:.2}) | driving {} | collision epoch {} columns {} rays {}/{} | render msgs {} sections {} avatar frames {}",
             self.frames,
             where_,
             link.mc_alive(),
@@ -246,7 +313,8 @@ impl State {
             self.collision.rays_hit,
             self.collision.rays_hit + self.collision.rays_missed,
             self.blocks.messages,
-            self.blocks.section_count()
+            self.blocks.section_count(),
+            self.blocks.avatar_frames
         );
     }
 }

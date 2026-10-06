@@ -235,6 +235,33 @@ pub const REN_ATLAS: u32 = 1;
 pub const REN_SECTION: u32 = 2;
 pub const REN_CLEAR_ALL: u32 = 3;
 pub const REN_ATLAS_REGION: u32 = 7;
+pub const REN_TEXTURE: u32 = 4;
+pub const REN_AVATAR: u32 = 5;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct RenTexture {
+    pub id: u32,
+    pub width: u32,
+    pub height: u32,
+    pub pad: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct RenAvatar {
+    pub batch_count: u32,
+    pub vertex_count: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct RenBatch {
+    pub texture: u32,
+    pub first: u32,
+    pub count: u32,
+    pub flags: u32,
+}
 
 #[repr(C)]
 #[derive(Clone, Copy)]

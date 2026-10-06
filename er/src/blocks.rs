@@ -25,7 +25,37 @@ struct Tri {
     color: [f32; 4],
 }
 
+struct Image {
+    w: u32,
+    h: u32,
+    px: Vec<u8>,
+}
+
+impl Image {
+    fn texel(&self, u: f32, v: f32) -> [f32; 4] {
+        if self.w == 0 {
+            return [0.6, 0.6, 0.6, 1.0];
+        }
+        let x = (u.clamp(0.0, 0.9999) * self.w as f32) as usize;
+        let y = (v.clamp(0.0, 0.9999) * self.h as f32) as usize;
+        let i = (y * self.w as usize + x) * 4;
+        if i + 3 >= self.px.len() {
+            return [0.6, 0.6, 0.6, 1.0];
+        }
+        [self.px[i] as f32 / 255.0, self.px[i + 1] as f32 / 255.0, self.px[i + 2] as f32 / 255.0, self.px[i + 3] as f32 / 255.0]
+    }
+}
+
+/// One avatar triangle: positions relative to the player's feet (blocks, MC axes).
+struct AvatarTri {
+    p: [[f32; 3]; 3],
+    color: [f32; 4],
+}
+
 pub struct Blocks {
+    textures: HashMap<u32, Image>,
+    avatar: Vec<AvatarTri>,
+    pub avatar_frames: u64,
     atlas_w: u32,
     atlas_h: u32,
     atlas: Vec<u8>,
@@ -51,7 +81,16 @@ fn rgba(c: u32) -> [f32; 4] {
 
 impl Blocks {
     pub fn new() -> Self {
-        Blocks { atlas_w: 0, atlas_h: 0, atlas: Vec::new(), sections: HashMap::new(), messages: 0 }
+        Blocks {
+            textures: HashMap::new(),
+            avatar: Vec::new(),
+            avatar_frames: 0,
+            atlas_w: 0,
+            atlas_h: 0,
+            atlas: Vec::new(),
+            sections: HashMap::new(),
+            messages: 0,
+        }
     }
 
     pub fn section_count(&self) -> usize {
@@ -79,7 +118,7 @@ impl Blocks {
     pub fn drain(&mut self, link: &Link) {
         let mut msgs: Vec<(u32, Vec<u8>)> = Vec::new();
         link.drain_render(DRAIN_BYTES_PER_FRAME, |kind, payload| {
-            if matches!(kind, REN_ATLAS | REN_SECTION | REN_CLEAR_ALL | REN_ATLAS_REGION) {
+            if matches!(kind, REN_ATLAS | REN_SECTION | REN_CLEAR_ALL | REN_ATLAS_REGION | REN_TEXTURE | REN_AVATAR) {
                 msgs.push((kind, payload.to_vec()));
             }
         });
@@ -98,6 +137,60 @@ impl Blocks {
                 }
                 REN_ATLAS_REGION => {} // animated textures: not needed for flat colours
                 REN_CLEAR_ALL => self.sections.clear(),
+                REN_TEXTURE => {
+                    let Some(t) = read::<RenTexture>(&p, 0) else { continue };
+                    let bytes = t.width as usize * t.height as usize * 4;
+                    let base = size_of::<RenTexture>();
+                    if p.len() >= base + bytes {
+                        self.textures.insert(t.id, Image { w: t.width, h: t.height, px: p[base..base + bytes].to_vec() });
+                        crate::log!("texture {} {}x{}", t.id, t.width, t.height);
+                    }
+                }
+                REN_AVATAR => {
+                    let Some(a) = read::<RenAvatar>(&p, 0) else { continue };
+                    self.avatar_frames += 1;
+                    self.avatar.clear();
+                    let batches = size_of::<RenAvatar>();
+                    let verts = batches + a.batch_count as usize * size_of::<RenBatch>();
+                    for b in 0..a.batch_count as usize {
+                        let Some(batch) = read::<RenBatch>(&p, batches + b * size_of::<RenBatch>()) else { break };
+                        for t in 0..(batch.count as usize / 3) {
+                            let mut vs = [[0f32; 3]; 3];
+                            let (mut u, mut v) = (0f32, 0f32);
+                            let mut tint = [0f32; 4];
+                            let mut ok = true;
+                            for k in 0..3 {
+                                let idx = batch.first as usize + t * 3 + k;
+                                let Some(vx) = read::<RenVertex>(&p, verts + idx * size_of::<RenVertex>()) else {
+                                    ok = false;
+                                    break;
+                                };
+                                vs[k] = [vx.x, vx.y, vx.z];
+                                u += vx.u / 3.0;
+                                v += vx.v / 3.0;
+                                let c = rgba(vx.color);
+                                for i in 0..4 {
+                                    tint[i] += c[i] / 3.0;
+                                }
+                            }
+                            if !ok {
+                                break;
+                            }
+                            let tex = if batch.texture == 0 {
+                                self.texel(u, v)
+                            } else {
+                                self.textures.get(&batch.texture).map(|i| i.texel(u, v)).unwrap_or([0.6, 0.6, 0.6, 1.0])
+                            };
+                            if tex[3] < 0.1 {
+                                continue;
+                            }
+                            self.avatar.push(AvatarTri {
+                                p: vs,
+                                color: [tex[0] * tint[0], tex[1] * tint[1], tex[2] * tint[2], 1.0],
+                            });
+                        }
+                    }
+                }
                 REN_SECTION => {
                     let Some(s) = read::<RenSection>(&p, 0) else { continue };
                     let key = (s.sx, s.sy, s.sz);
@@ -156,6 +249,30 @@ impl Blocks {
                 _ => {}
             }
         }
+    }
+
+    pub fn has_avatar(&self) -> bool {
+        !self.avatar.is_empty()
+    }
+
+    /// The Minecraft player model at its feet (MC coords). Returns triangles drawn.
+    pub fn draw_avatar(&self, ez: &mut CSEzDraw, frame: &Frame, feet: [f64; 3]) -> usize {
+        ez.set_fill_mode(EzDrawFillMode::Fill);
+        for t in &self.avatar {
+            let h: Vec<[f32; 3]> = t
+                .p
+                .iter()
+                .map(|v| frame.havok_for_mc([feet[0] + v[0] as f64, feet[1] + v[1] as f64, feet[2] + v[2] as f64]))
+                .collect();
+            let tri = Triangle {
+                origin: F32Vector4(h[0][0], h[0][1], h[0][2], 0.0),
+                edge1: F32Vector4(h[1][0] - h[0][0], h[1][1] - h[0][1], h[1][2] - h[0][2], 0.0),
+                edge2: F32Vector4(h[2][0] - h[0][0], h[2][1] - h[0][1], h[2][2] - h[0][2], 0.0),
+            };
+            ez.set_color(&F32Vector4(t.color[0], t.color[1], t.color[2], 1.0));
+            ez.draw_triangle(&tri);
+        }
+        self.avatar.len()
     }
 
     /// Returns how many triangles were drawn.

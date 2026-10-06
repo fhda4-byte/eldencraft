@@ -8,7 +8,7 @@
 
 use std::collections::{HashSet, VecDeque};
 
-use eldenring::cs::{CSHavokMan, PlayerIns};
+use eldenring::cs::{CSHavokMan, CSPhysWorld, PlayerIns};
 use eldenring::position::{HavokPosition, PositionDelta};
 use fromsoftware_shared::FromStatic;
 
@@ -21,11 +21,39 @@ use crate::proto::*;
 const RAY_FILTER: u32 = 0x0200_0058;
 const RADIUS_REGIONS: i32 = 3;
 const COLUMNS_PER_FRAME: usize = 2;
-const RAY_TOP: f64 = 40.0; // blocks above the player's feet
-const RAY_LENGTH: f32 = 100.0; // metres down
+/// Ray starts above the player's feet, lowest first: the first surface found from just above the
+/// player's level wins, so floors under a roof (castles, caves) are found before the roof.
+const RAY_STARTS: [f64; 4] = [2.0, 8.0, 20.0, 45.0];
+const RAY_BELOW: f64 = 60.0; // how far under the feet a ray still looks
+
+/// The walkable surface at Minecraft column (x, z) nearest above-or-below the player's level.
+pub fn ground_at(world: &CSPhysWorld, frame: &Frame, player: &PlayerIns, x: f64, z: f64, feet_y: f64) -> Option<f64> {
+    for top in RAY_STARTS {
+        let o = frame.havok_for_mc([x, feet_y + top, z]);
+        let origin = HavokPosition(o[0], o[1], o[2], 0.0);
+        let len = (top + RAY_BELOW) as f32;
+        if let Some(hit) = world.cast_ray(RAY_FILTER, &origin, PositionDelta(0.0, -len, 0.0), player) {
+            return Some(frame.mc_for_havok([hit.0, hit.1, hit.2])[1]);
+        }
+    }
+    None
+}
+
+/// Ground under a point, searching down from `from_y` (MC coords).
+pub fn ground_below(frame: &Frame, player: &PlayerIns, x: f64, z: f64, from_y: f64, depth: f64) -> Option<f64> {
+    let havok = unsafe { CSHavokMan::instance() }.ok()?;
+    let o = frame.havok_for_mc([x, from_y, z]);
+    let origin = HavokPosition(o[0], o[1], o[2], 0.0);
+    havok
+        .phys_world
+        .cast_ray(RAY_FILTER, &origin, PositionDelta(0.0, -(depth as f32), 0.0), player)
+        .map(|hit| frame.mc_for_havok([hit.0, hit.1, hit.2])[1])
+}
 
 pub struct Collision {
     pub epoch: u32,
+    /// Last ground height found under the player (MC y): fills columns where no ray hits.
+    pub fallback_y: Option<f64>,
     done: HashSet<(i32, i32)>,
     pending: VecDeque<(u32, Vec<u8>)>,
     pub columns_sent: u32,
@@ -45,6 +73,7 @@ impl Collision {
     pub fn new() -> Self {
         Collision {
             epoch: 1,
+            fallback_y: None,
             done: HashSet::new(),
             pending: VecDeque::new(),
             columns_sent: 0,
@@ -73,6 +102,17 @@ impl Collision {
             self.pending.pop_front();
         }
         true
+    }
+
+    /// Stream the columns around this point again (after the player fell through a gap).
+    pub fn redo_around(&mut self, mc: [f64; 3]) {
+        let cx = (mc[0] / REGION_SIZE as f64).floor() as i32;
+        let cz = (mc[2] / REGION_SIZE as f64).floor() as i32;
+        for dz in -1..=1 {
+            for dx in -1..=1 {
+                self.done.remove(&(cx + dx, cz + dz));
+            }
+        }
     }
 
     /// `mc_feet`: the player's feet in Minecraft coords.
@@ -108,7 +148,7 @@ impl Collision {
 
     fn build_column(
         &mut self,
-        world: &eldenring::cs::CSPhysWorld,
+        world: &CSPhysWorld,
         frame: &Frame,
         player: &PlayerIns,
         rx: i32,
@@ -120,19 +160,47 @@ impl Collision {
         let n = (REGION_SIZE + 1) as usize;
         // Heights (MC y) at block corners (x0 + i, z0 + j); NaN = no ground found.
         let mut h = vec![f64::NAN; n * n];
+        let mut hits = 0usize;
         for j in 0..n {
             for i in 0..n {
-                let mc = [(x0 + i as i32) as f64, feet_y + RAY_TOP, (z0 + j as i32) as f64];
-                let o = frame.havok_for_mc(mc);
-                let origin = HavokPosition(o[0], o[1], o[2], 0.0);
-                match world.cast_ray(RAY_FILTER, &origin, PositionDelta(0.0, -RAY_LENGTH, 0.0), player) {
-                    Some(hit) => {
-                        h[j * n + i] = frame.mc_for_havok([hit.0, hit.1, hit.2])[1];
-                        self.rays_hit += 1;
-                    }
-                    None => self.rays_missed += 1,
+                let (x, z) = ((x0 + i as i32) as f64, (z0 + j as i32) as f64);
+                if let Some(y) = ground_at(world, frame, player, x, z, feet_y) {
+                    h[j * n + i] = y;
+                    hits += 1;
+                    self.rays_hit += 1;
+                } else {
+                    self.rays_missed += 1;
                 }
             }
+        }
+        // Holes (no surface found: inside walls, outside loaded collision) take the nearest height
+        // found in this column, or the last ground found under the player: never an open hole the
+        // Minecraft player could fall through.
+        let fallback = self.fallback_y.unwrap_or(feet_y);
+        if hits == 0 {
+            h.iter_mut().for_each(|v| *v = fallback);
+        } else if hits < n * n {
+            let known: Vec<(usize, f64)> = h.iter().enumerate().filter(|(_, v)| !v.is_nan()).map(|(k, v)| (k, *v)).collect();
+            for k in 0..n * n {
+                if h[k].is_nan() {
+                    let (ki, kj) = ((k % n) as i64, (k / n) as i64);
+                    let best = known
+                        .iter()
+                        .min_by_key(|(q, _)| ((*q % n) as i64 - ki).pow(2) + ((*q / n) as i64 - kj).pow(2))
+                        .map(|(_, v)| *v)
+                        .unwrap_or(fallback);
+                    h[k] = best;
+                }
+            }
+        }
+        if self.columns_sent < 6 {
+            log!(
+                "collision column ({rx}, {rz}): {hits}/{} rays hit, feet y {:.2}, heights {:.2}..{:.2}",
+                n * n,
+                feet_y,
+                h.iter().cloned().fold(f64::INFINITY, f64::min),
+                h.iter().cloned().fold(f64::NEG_INFINITY, f64::max)
+            );
         }
         let at = |i: usize, j: usize| h[j * n + i];
 
