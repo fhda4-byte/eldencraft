@@ -16,7 +16,7 @@ use crate::link::Link;
 use crate::proto::*;
 
 const DRAW_RADIUS: f64 = 48.0;
-const MAX_TRIS_PER_FRAME: usize = 8000;
+const MAX_TRIS_PER_FRAME: usize = 24000;
 const DRAIN_BYTES_PER_FRAME: u64 = 16 << 20;
 
 struct Tri {
@@ -77,6 +77,100 @@ fn rgba(c: u32) -> [f32; 4] {
         ((c >> 16) & 0xFF) as f32 / 255.0,
         ((c >> 24) & 0xFF) as f32 / 255.0,
     ]
+}
+
+/// Splits a textured triangle into one flat-coloured quad per texel (or per `step` x `step` texels),
+/// so a flat-colour debug renderer still shows the texture: Steve's face, armour, block patterns.
+/// `uv` in 0..1; `tex` returns RGBA for a texel (x, y). Cells whose centre is outside the triangle are
+/// left to the neighbouring triangle of the quad; transparent texels (alpha < 0.5) are skipped.
+fn texelize(
+    pos: [[f32; 3]; 3],
+    uv: [[f32; 2]; 3],
+    size: (u32, u32),
+    max_cells: usize,
+    tint: [f32; 4],
+    shade: f32,
+    tex: &dyn Fn(u32, u32) -> [f32; 4],
+    out: &mut Vec<([[f32; 3]; 3], [f32; 4])>,
+) {
+    let (w, h) = (size.0 as f32, size.1 as f32);
+    let t: Vec<[f32; 2]> = uv.iter().map(|q| [q[0] * w, q[1] * h]).collect();
+    let (e1, e2) = ([t[1][0] - t[0][0], t[1][1] - t[0][1]], [t[2][0] - t[0][0], t[2][1] - t[0][1]]);
+    let det = e1[0] * e2[1] - e1[1] * e2[0];
+    let flat = |out: &mut Vec<([[f32; 3]; 3], [f32; 4])>| {
+        let c = [
+            (t[0][0] + t[1][0] + t[2][0]) / 3.0,
+            (t[0][1] + t[1][1] + t[2][1]) / 3.0,
+        ];
+        let px = tex(c[0].max(0.0) as u32, c[1].max(0.0) as u32);
+        if px[3] >= 0.5 {
+            out.push((pos, [px[0] * tint[0] * shade, px[1] * tint[1] * shade, px[2] * tint[2] * shade, 1.0]));
+        }
+    };
+    if det.abs() < 1e-6 {
+        flat(out);
+        return;
+    }
+    // texel space -> barycentric (b1, b2) -> position
+    let to_bary = |x: f32, y: f32| {
+        let (dx, dy) = (x - t[0][0], y - t[0][1]);
+        ((dx * e2[1] - dy * e2[0]) / det, (e1[0] * dy - e1[1] * dx) / det)
+    };
+    let at = |b1: f32, b2: f32| {
+        [
+            pos[0][0] + b1 * (pos[1][0] - pos[0][0]) + b2 * (pos[2][0] - pos[0][0]),
+            pos[0][1] + b1 * (pos[1][1] - pos[0][1]) + b2 * (pos[2][1] - pos[0][1]),
+            pos[0][2] + b1 * (pos[1][2] - pos[0][2]) + b2 * (pos[2][2] - pos[0][2]),
+        ]
+    };
+    let minx = t.iter().map(|q| q[0]).fold(f32::INFINITY, f32::min).floor();
+    let maxx = t.iter().map(|q| q[0]).fold(f32::NEG_INFINITY, f32::max).ceil();
+    let miny = t.iter().map(|q| q[1]).fold(f32::INFINITY, f32::min).floor();
+    let maxy = t.iter().map(|q| q[1]).fold(f32::NEG_INFINITY, f32::max).ceil();
+    let cells = ((maxx - minx) * (maxy - miny)).max(1.0) as usize;
+    let step = ((cells as f32 / max_cells as f32).sqrt().ceil()).max(1.0);
+    let mut y = miny;
+    while y < maxy {
+        let mut x = minx;
+        while x < maxx {
+            let (cx, cy) = (x + step * 0.5, y + step * 0.5);
+            let (b1, b2) = to_bary(cx, cy);
+            if b1 >= -1e-4 && b2 >= -1e-4 && b1 + b2 <= 1.0 + 1e-4 {
+                let px = tex(cx.max(0.0) as u32, cy.max(0.0) as u32);
+                if px[3] >= 0.5 {
+                    let color = [px[0] * tint[0] * shade, px[1] * tint[1] * shade, px[2] * tint[2] * shade, 1.0];
+                    let c00 = { let (a, b) = to_bary(x, y); at(a, b) };
+                    let c10 = { let (a, b) = to_bary(x + step, y); at(a, b) };
+                    let c01 = { let (a, b) = to_bary(x, y + step); at(a, b) };
+                    let c11 = { let (a, b) = to_bary(x + step, y + step); at(a, b) };
+                    out.push(([c00, c10, c11], color));
+                    out.push(([c00, c11, c01], color));
+                }
+            }
+            x += step;
+        }
+        y += step;
+    }
+}
+
+impl Image {
+    fn px(&self, x: u32, y: u32) -> [f32; 4] {
+        if x >= self.w || y >= self.h {
+            return [0.0, 0.0, 0.0, 0.0];
+        }
+        let i = ((y * self.w + x) * 4) as usize;
+        [self.px[i] as f32 / 255.0, self.px[i + 1] as f32 / 255.0, self.px[i + 2] as f32 / 255.0, self.px[i + 3] as f32 / 255.0]
+    }
+}
+
+impl Blocks {
+    fn atlas_px(&self, x: u32, y: u32) -> [f32; 4] {
+        if x >= self.atlas_w || y >= self.atlas_h {
+            return [0.0, 0.0, 0.0, 0.0];
+        }
+        let i = ((y * self.atlas_w + x) * 4) as usize;
+        [self.atlas[i] as f32 / 255.0, self.atlas[i + 1] as f32 / 255.0, self.atlas[i + 2] as f32 / 255.0, self.atlas[i + 3] as f32 / 255.0]
+    }
 }
 
 impl Blocks {
@@ -156,7 +250,7 @@ impl Blocks {
                         let Some(batch) = read::<RenBatch>(&p, batches + b * size_of::<RenBatch>()) else { break };
                         for t in 0..(batch.count as usize / 3) {
                             let mut vs = [[0f32; 3]; 3];
-                            let (mut u, mut v) = (0f32, 0f32);
+                            let mut uvs = [[0f32; 2]; 3];
                             let mut tint = [0f32; 4];
                             let mut ok = true;
                             for k in 0..3 {
@@ -166,8 +260,7 @@ impl Blocks {
                                     break;
                                 };
                                 vs[k] = [vx.x, vx.y, vx.z];
-                                u += vx.u / 3.0;
-                                v += vx.v / 3.0;
+                                uvs[k] = [vx.u, vx.v];
                                 let c = rgba(vx.color);
                                 for i in 0..4 {
                                     tint[i] += c[i] / 3.0;
@@ -176,18 +269,15 @@ impl Blocks {
                             if !ok {
                                 break;
                             }
-                            let tex = if batch.texture == 0 {
-                                self.texel(u, v)
-                            } else {
-                                self.textures.get(&batch.texture).map(|i| i.texel(u, v)).unwrap_or([0.6, 0.6, 0.6, 1.0])
-                            };
-                            if tex[3] < 0.1 {
-                                continue;
+                            let mut cells = Vec::new();
+                            if batch.texture == 0 {
+                                texelize(vs, uvs, (self.atlas_w, self.atlas_h), 64, tint, 1.0, &|x, y| self.atlas_px(x, y), &mut cells);
+                            } else if let Some(img) = self.textures.get(&batch.texture) {
+                                texelize(vs, uvs, (img.w, img.h), 64, tint, 1.0, &|x, y| img.px(x, y), &mut cells);
                             }
-                            self.avatar.push(AvatarTri {
-                                p: vs,
-                                color: [tex[0] * tint[0], tex[1] * tint[1], tex[2] * tint[2], 1.0],
-                            });
+                            for (p3, color) in cells {
+                                self.avatar.push(AvatarTri { p: p3, color });
+                            }
                         }
                     }
                 }
@@ -203,7 +293,7 @@ impl Blocks {
                     let base = size_of::<RenSection>();
                     for t in 0..(s.vertex_count as usize / 3) {
                         let mut vs = [[0f32; 3]; 3];
-                        let (mut u, mut v) = (0f32, 0f32);
+                        let mut uvs = [[0f32; 2]; 3];
                         let mut tint = [0f32; 4];
                         let mut flags = 0u32;
                         let mut ok = true;
@@ -213,8 +303,7 @@ impl Blocks {
                                 break;
                             };
                             vs[k] = [origin[0] + vx.x, origin[1] + vx.y, origin[2] + vx.z];
-                            u += vx.u / 3.0;
-                            v += vx.v / 3.0;
+                            uvs[k] = [vx.u, vx.v];
                             let c = rgba(vx.color);
                             for i in 0..4 {
                                 tint[i] += c[i] / 3.0;
@@ -224,10 +313,6 @@ impl Blocks {
                         if !ok {
                             break;
                         }
-                        let tex = self.texel(u, v);
-                        if tex[3] < 0.1 {
-                            continue; // fully transparent texel (cutout leaves, glass edges)
-                        }
                         // Minecraft's fixed face shading: down, up, north, south, west, east.
                         let shade = match (flags >> 4) & 7 {
                             1 => 0.5,
@@ -236,13 +321,17 @@ impl Blocks {
                             5 | 6 => 0.6,
                             _ => 0.9,
                         };
-                        let color = [tex[0] * tint[0] * shade, tex[1] * tint[1] * shade, tex[2] * tint[2] * shade, 1.0];
-                        let centre = [
-                            (vs[0][0] + vs[1][0] + vs[2][0]) / 3.0,
-                            (vs[0][1] + vs[1][1] + vs[2][1]) / 3.0,
-                            (vs[0][2] + vs[1][2] + vs[2][2]) / 3.0,
-                        ];
-                        tris.push(Tri { p: vs, centre, color });
+                        // 4 x 4 cells per block face: the texture's pattern without too many draws.
+                        let mut cells = Vec::new();
+                        texelize(vs, uvs, (self.atlas_w, self.atlas_h), 8, tint, shade, &|x, y| self.atlas_px(x, y), &mut cells);
+                        for (p3, color) in cells {
+                            let centre = [
+                                (p3[0][0] + p3[1][0] + p3[2][0]) / 3.0,
+                                (p3[0][1] + p3[1][1] + p3[2][1]) / 3.0,
+                                (p3[0][2] + p3[1][2] + p3[2][2]) / 3.0,
+                            ];
+                            tris.push(Tri { p: p3, centre, color });
+                        }
                     }
                     self.sections.insert(key, tris);
                 }

@@ -44,6 +44,8 @@ struct State {
     settled_since: Option<Instant>,
     last_f5: Option<Instant>,
     hid_model: bool,
+    last_guard: Option<Instant>,
+    teleport_to: Option<[f64; 3]>,
     last_report: Instant,
     frames: u64,
 }
@@ -66,6 +68,8 @@ impl State {
             settled_since: None,
             last_f5: None,
             hid_model: false,
+            last_guard: None,
+            teleport_to: None,
             last_report: Instant::now(),
             frames: 0,
         }
@@ -144,7 +148,13 @@ impl State {
             self.written_global = None;
         } else {
             // Elden Ring moved the player itself (grace travel, a cutscene, being grabbed).
-            let reference = if self.driving { self.written_global } else { self.last_global };
+            let reference = if self.teleport_to.is_some() {
+                None
+            } else if self.driving {
+                self.written_global
+            } else {
+                self.last_global
+            };
             if let Some(r) = reference {
                 let d = ((global[0] - r[0]).powi(2) + (global[1] - r[1]).powi(2) + (global[2] - r[2]).powi(2)).sqrt();
                 if d > TELEPORT_METRES {
@@ -166,13 +176,27 @@ impl State {
             .unwrap_or((0.0, 0.0));
 
         let feet = coords::mc_from_global(global);
+        if let Some(t) = self.teleport_to {
+            if mc.teleport_ack == self.teleport_seq {
+                self.teleport_to = None;
+            } else {
+                // Put the Tarnished there too, so both games agree while Minecraft catches up.
+                let h = frame.havok_for_mc(t);
+                let phys = &mut player.chr_ins.modules.physics;
+                phys.position.0 = h[0];
+                phys.position.1 = h[1];
+                phys.position.2 = h[2];
+                phys.chr_proxy_pos_update_requested = true;
+            }
+        }
+        let sky_pos = self.teleport_to.unwrap_or(feet);
         sky.flags = SKY_IN_GAME;
         sky.world_id = world_id;
         sky.teleport_seq = self.teleport_seq;
         sky.collision_epoch = self.collision.epoch;
-        sky.pos_x = feet[0];
-        sky.pos_y = feet[1];
-        sky.pos_z = feet[2];
+        sky.pos_x = sky_pos[0];
+        sky.pos_y = sky_pos[1];
+        sky.pos_z = sky_pos[2];
         sky.yaw = yaw;
         sky.pitch = pitch;
         link.write_sky_state(&sky);
@@ -189,14 +213,16 @@ impl State {
         if let Some(g) = er_ground {
             self.collision.fallback_y = Some(g);
         }
-        if mc_ready {
-            let from = mc.y.max(feet[1]) + 1.5;
-            let depth = (from - mc.y) + 2.0;
-            if let Some(g) = collision::ground_below(&frame, player, mc.x, mc.z, from, depth) {
-                if mc.y < g - 0.6 {
-                    log!("guard: Minecraft player at y {:.2} is under Elden Ring's ground {:.2}: back up", mc.y, g);
+        // Only a real fall-through counts: Minecraft's player is airborne and 2+ blocks under the
+        // surface Elden Ring has at its column (low walls and gravestones above the feet don't).
+        if mc_ready && (mc.flags & MC_ON_GROUND) == 0 && self.last_guard.map_or(true, |t| t.elapsed() > Duration::from_secs(1)) {
+            if let Some(g) = collision::ground_below(&frame, player, mc.x, mc.z, mc.y + 3.0, 40.0) {
+                if mc.y < g - 2.0 {
+                    log!("guard: Minecraft player at y {:.2} fell under Elden Ring's ground {:.2}: back up", mc.y, g);
                     self.teleport_seq += 1;
+                    self.teleport_to = Some([mc.x, g + 0.05, mc.z]);
                     self.collision.redo_around([mc.x, g, mc.z]);
+                    self.last_guard = Some(Instant::now());
                     mc_ready = false;
                 }
             }
