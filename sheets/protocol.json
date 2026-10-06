@@ -1,0 +1,18 @@
+{
+  "sheet": "protocol",
+  "about": "Shared-memory regions used between the ER DLL and the Minecraft Fabric mod. Layout is SkyCraft protocol v11 (MIT) reused unchanged except the mapping name; Java side: fabric Proto.java.",
+  "columns": ["id", "direction", "offset", "used_by", "er_side_status", "notes"],
+  "rows": [
+    {"id": "Header", "direction": "both", "offset": "0x0", "used_by": ["link", "launcher"], "er_side_status": "port", "notes": "magic SKYC, version 11"},
+    {"id": "SkyState", "direction": "er->mc", "offset": "0x100", "used_by": ["link", "movement", "collision"], "er_side_status": "port", "notes": "worldId = ER map block id; posX/Y/Z in MC coords via constants sheet"},
+    {"id": "McState", "direction": "mc->er", "offset": "0x200", "used_by": ["link", "movement", "camera"], "er_side_status": "port", "notes": "use tick prev/cur + QPC for interpolation"},
+    {"id": "OverlayCtl", "direction": "mc->er", "offset": "0x300", "used_by": ["hud_overlay"], "er_side_status": "port", "notes": "triple buffer"},
+    {"id": "Overlay", "direction": "mc->er", "offset": "kOffOverlayPixels", "used_by": ["hud_overlay"], "er_side_status": "port", "notes": "max 3840x2160 RGBA"},
+    {"id": "InputRing", "direction": "er->mc", "offset": "0x1000", "used_by": ["input", "enemy_hits_player"], "er_side_status": "port", "notes": "SDL scancodes; DirectInput DIK -> SDL table needed"},
+    {"id": "CollisionRing", "direction": "er->mc", "offset": "0x20000", "used_by": ["collision"], "er_side_status": "new producer", "notes": "SkyCraft ColTri format"},
+    {"id": "ActorTable", "direction": "er->mc", "offset": "0x12000", "used_by": ["actors"], "er_side_status": "new producer", "notes": "formId field carries ER field-ins handle low 32 bits"},
+    {"id": "EventRing", "direction": "mc->er", "offset": "0x17000", "used_by": ["player_hits_enemy", "enemy_hits_player"], "er_side_status": "new consumer", "notes": "kEvSkillUse ignored (Skyrim-only)"},
+    {"id": "WorldEntities", "direction": "mc->er", "offset": "0x1C000", "used_by": ["block_render", "build_break"], "er_side_status": "port to D3D12", "notes": "arrows, dropped items, cracks, block outline"},
+    {"id": "RenderRing", "direction": "mc->er", "offset": "kOffRenderRing", "used_by": ["block_render", "build_break", "dig_terrain"], "er_side_status": "port to D3D12", "notes": "atlas, sections, avatar, scene"}
+  ]
+}

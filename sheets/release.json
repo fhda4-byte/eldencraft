@@ -1,0 +1,11 @@
+{
+  "sheet": "release",
+  "about": "What goes in the Melty release. Modelled on SkyCraft's live recipe (one click: yes).",
+  "columns": ["id", "file", "contents", "installs_to", "license", "built", "verified"],
+  "rows": [
+    {"id": "main", "file": "EldenCraft-*.zip", "contents": "eldencraft.dll + ModEngine2 mod config entry (external_dlls)", "installs_to": "{managed}/modengine2 (mod folder per game_info)", "license": "MIT (ours)", "built": false, "verified": false},
+    {"id": "minecraft", "file": "EldenCraft-Minecraft-*.zip", "contents": "portable Prism Launcher + EldenCraft instance (MC 26.3, Fabric loader, Fabric API, eldencraft-fabric.jar)", "installs_to": "{localappdata}/EldenCraft", "license": "Prism GPL-3.0, Fabric Apache-2.0, Fabric API Apache-2.0, SkyCraft-derived code MIT (credit chasmlol)", "built": false, "verified": false},
+    {"id": "first_start", "file": "", "contents": "Melty runs {localappdata}/EldenCraft/Prism/prismlauncher.exe --launch EldenCraft and waits for 'Backend library:' in its latest.log; first time the player signs in to Minecraft once", "installs_to": "", "license": "", "built": false, "verified": false},
+    {"id": "launch", "file": "", "contents": "Melty starts Elden Ring through ModEngine2, offline, EAC off (game_info launch)", "installs_to": "", "license": "", "built": false, "verified": false}
+  ]
+}

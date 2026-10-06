@@ -1,0 +1,12 @@
+{
+  "sheet": "weapons",
+  "about": "How each Minecraft weapon class lands on an Elden Ring enemy. Damage itself comes from Minecraft; this sheet picks the ER hit effect.",
+  "columns": ["id", "mc_items", "hit_weapon", "er_bullet_row", "er_effect", "verified"],
+  "rows": [
+    {"id": "blade", "mc_items": "swords", "hit_weapon": "kWeaponBlade", "er_bullet_row": "TBD vanilla slash-like row", "er_effect": "slash blood + stagger", "verified": false},
+    {"id": "axe", "mc_items": "axes", "hit_weapon": "kWeaponBlade", "er_bullet_row": "TBD vanilla slash-like row", "er_effect": "slash + heavier stagger", "verified": false},
+    {"id": "blunt", "mc_items": "maces, pickaxes, shovels, hoes, fists, anything held", "hit_weapon": "kWeaponBlunt", "er_bullet_row": "TBD vanilla strike row", "er_effect": "strike", "verified": false},
+    {"id": "pierce", "mc_items": "tridents, spears", "hit_weapon": "kWeaponPierce", "er_bullet_row": "TBD vanilla pierce row", "er_effect": "pierce", "verified": false},
+    {"id": "arrow", "mc_items": "bow, crossbow arrows", "hit_weapon": "kWeaponArrow", "er_bullet_row": "TBD vanilla arrow row", "er_effect": "arrow hit", "verified": false}
+  ]
+}
