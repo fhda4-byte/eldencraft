@@ -20,7 +20,7 @@ mod walk;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use eldenring::cs::{CSCamera, CSHavokMan, CSTaskGroupIndex, CSTaskImp, RendMan, WorldChrMan};
+use eldenring::cs::{CSCamera, CSTaskGroupIndex, CSTaskImp, RendMan, WorldChrMan};
 use eldenring::fd4::FD4TaskData;
 use fromsoftware_shared::{FromStatic, SharedTaskImpExt};
 
@@ -33,24 +33,20 @@ const SETTLE: Duration = Duration::from_secs(3);
 /// tick instead of moving itself, and whether that position is standing on the ground.
 const EC_FOLLOW: u32 = 1 << 8;
 const EC_ON_GROUND: u32 = 1 << 9;
-/// Elden Ring actions switched off while Minecraft drives: attacks, dodge, jump, items, crouch,
-/// backstep, roll, magic, gestures, guard, kicks, two-handing, Torrent. Ladders and interact stay on.
+/// Elden Ring actions switched off while Minecraft drives: attacks, items, roll, magic, gestures,
+/// guard, kicks, two-handing, Torrent. Walking, jumping, dashing, ladders and interact stay on.
 fn block_actions(a: &mut eldenring::cs::ChrActions, on: bool) {
     a.set_r1(on);
     a.set_r2(on);
     a.set_l1(on);
     a.set_l2(on);
-    a.set_sp_move(on);
-    a.set_jump(on);
     a.set_use_item(on);
     a.set_l3(on);
-    a.set_backstep(on);
     a.set_rolling(on);
     a.set_magic_r(on);
     a.set_magic_l(on);
     a.set_gesture(on);
     a.set_guard(on);
-    a.set_emergencystep(on);
     a.set_light_kick(on);
     a.set_heavy_kick(on);
     a.set_change_style_r(on);
@@ -262,33 +258,34 @@ impl State {
         self.input.poll(link, mc_ready, screen_open);
 
         if mc_ready {
-            let phys = &mut player.chr_ins.modules.physics;
+            // Elden Ring's own physics moves the player (ground, walls, stairs, caves: never through
+            // its floor); Minecraft's player follows. Placed Minecraft blocks are added on top.
             if self.saved_gravity.is_none() {
-                self.saved_gravity = Some(phys.gravity_multiplier);
-                log!("driving: Minecraft movement on Elden Ring's collision (gravity was {})", phys.gravity_multiplier);
+                self.saved_gravity = Some(player.chr_ins.modules.physics.gravity_multiplier);
+                log!("driving: Elden Ring physics, Minecraft follows (gravity {})", player.chr_ins.modules.physics.gravity_multiplier);
             }
-            if !self.walker.active {
-                self.walker.reset(feet);
-            }
-            if let Ok(havok_man) = unsafe { CSHavokMan::instance() } {
-                let world = &*havok_man.phys_world;
-                let input = self.input.movement();
-                self.walker.step(world, &frame, player, &self.blocks, input, yaw, self.dt);
-            }
-            let h = frame.havok_for_mc(self.walker.pos);
+            let prev = if self.walker.active { self.walker.pos } else { feet };
+            let (fixed, on_block) = walk::block_fix(&self.blocks, prev, feet);
             let phys = &mut player.chr_ins.modules.physics;
-            phys.position.0 = h[0];
-            phys.position.1 = h[1];
-            phys.position.2 = h[2];
-            phys.chr_proxy_pos_update_requested = true;
-            // The game's own gravity would build a hidden fall speed and kill on landing (field note).
-            phys.gravity_multiplier = 0.0;
-            phys.gravity_disabled = true;
-            player.chr_ins.modules.fall.fall_timer = 0.0;
-            // Attacks, rolls, jumps and items are Minecraft's now; Elden Ring's interact (graces,
-            // doors, ladders, items) stays with Elden Ring.
+            if fixed != feet {
+                let h = frame.havok_for_mc(fixed);
+                phys.position.0 = h[0];
+                phys.position.1 = h[1];
+                phys.position.2 = h[2];
+                phys.chr_proxy_pos_update_requested = true;
+            }
+            // Standing on a Minecraft block: no Elden Ring fall building up underneath.
+            phys.gravity_multiplier = if on_block { 0.0 } else { self.saved_gravity.unwrap_or(1.0) };
+            if on_block {
+                player.chr_ins.modules.fall.fall_timer = 0.0;
+            }
+            self.walker.pos = fixed;
+            self.walker.on_ground = on_block || !player.chr_ins.modules.physics.is_falling;
+            self.walker.active = true;
+            // Attacks, rolls, items and magic are Minecraft's; walking, jumping, dashing, ladders and
+            // interact stay Elden Ring's.
             block_actions(&mut player.chr_ins.modules.action_request.disabled_action_inputs, true);
-            self.written_global = Some(coords::global_from_mc(self.walker.pos));
+            self.written_global = Some(coords::global_from_mc(fixed));
             self.driving = true;
         } else {
             self.release(Some(&mut *player));

@@ -329,3 +329,57 @@ impl Walker {
         best
     }
 }
+
+/// Highest Minecraft block top under a 0.6-wide box at `p`, between feet heights `lo` and `hi`.
+fn blocks_top(blocks: &Blocks, p: [f64; 3], lo: f64, hi: f64) -> Option<f64> {
+    let mut best: Option<f64> = None;
+    let (x0, x1) = ((p[0] - RADIUS + 0.001).floor() as i32, (p[0] + RADIUS - 0.001).floor() as i32);
+    let (z0, z1) = ((p[2] - RADIUS + 0.001).floor() as i32, (p[2] + RADIUS - 0.001).floor() as i32);
+    for x in x0..=x1 {
+        for z in z0..=z1 {
+            for y in (lo - 1.0).floor() as i32..=hi.floor() as i32 {
+                let top = (y + 1) as f64;
+                if top >= lo && top <= hi && blocks.is_solid(x, y, z) {
+                    best = Some(best.map_or(top, |b: f64| b.max(top)));
+                }
+            }
+        }
+    }
+    best
+}
+
+fn box_hits_blocks(blocks: &Blocks, p: [f64; 3]) -> bool {
+    let (x0, x1) = ((p[0] - RADIUS + 0.001).floor() as i32, (p[0] + RADIUS - 0.001).floor() as i32);
+    let (z0, z1) = ((p[2] - RADIUS + 0.001).floor() as i32, (p[2] + RADIUS - 0.001).floor() as i32);
+    let (y0, y1) = ((p[1] + 0.001).floor() as i32, (p[1] + HEIGHT - 0.001).floor() as i32);
+    (x0..=x1).any(|x| (z0..=z1).any(|z| (y0..=y1).any(|y| blocks.is_solid(x, y, z))))
+}
+
+/// v0.2.1: Elden Ring's own physics moves the player (its ground and walls are complete; our rays
+/// were not). Only the blocks placed in Minecraft are added on top: stand on them, step up 0.6 onto
+/// them, and don't walk into them. `prev`: last frame's corrected feet; `now`: where Elden Ring put
+/// them this frame. Returns (corrected feet, standing on a Minecraft block).
+pub fn block_fix(blocks: &Blocks, prev: [f64; 3], now: [f64; 3]) -> ([f64; 3], bool) {
+    let mut p = now;
+    // Landing on / standing on a block: never sink into its top.
+    if let Some(top) = blocks_top(blocks, p, p[1] - 0.05, p[1] + STEP) {
+        let up = [p[0], top, p[2]];
+        if !box_hits_blocks(blocks, up) {
+            p = up;
+        }
+    }
+    if box_hits_blocks(blocks, p) {
+        // Walked into a block wall: keep the old horizontal position, one axis at a time.
+        let try_x = [now[0], p[1], prev[2]];
+        let try_z = [prev[0], p[1], now[2]];
+        p = if !box_hits_blocks(blocks, try_x) {
+            try_x
+        } else if !box_hits_blocks(blocks, try_z) {
+            try_z
+        } else {
+            [prev[0], p[1].max(prev[1]), prev[2]]
+        };
+    }
+    let supported = blocks_top(blocks, p, p[1] - 0.05, p[1] + 0.05).is_some();
+    (p, supported)
+}

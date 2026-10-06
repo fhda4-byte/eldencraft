@@ -79,3 +79,12 @@ Pattern 2 passthrough: ER native Rust DLL (ModEngine2 external_dlls) <-> hidden 
 - 0.2.0 HUD: hudhook 0.9.3 (DX12, MIT) draws the overlay frame as rectangles in screen pixels over the finished frame
   (ImGui background draw list). replace_texture not used: hudhook's DX12 upload leaks an upload buffer per call.
 - 0.2.0 built (CI 37546744017; mixin targets move/collide confirmed in 26.3 jars) and submitted to the Melty draft (release b07eec10, one click yes). Waiting for the user's Test.
+
+## 2026-10-07 test (0.2.0): fell out of the map again (Stranded Graveyard m18_00)
+- Log: walker walked from y 6 down to the lower floor (-10.65), then at about MC (-85..-89, -40..-43) every ground ray
+  missed and the walker fell to y -308. Havok rays with filter 0x02000058 don't see all of Elden Ring's floors (the
+  streaming columns already showed 13/81 misses there). HUD overlay worked (hook installed, frames drawn).
+- 0.2.1: Elden Ring's own physics moves the player again (no position writes, its gravity on, jump/dash/backstep
+  allowed); Minecraft follows every tick (follow mode, on-ground = !physics.is_falling). Placed Minecraft blocks are
+  added on top (walk::block_fix: stand on / step onto / no walking into them; gravity off while on one).
+  walk.rs's ray controller is kept but unused.
