@@ -18,6 +18,11 @@ $prismZip = "PrismLauncher-Windows-MSVC-Portable-$prismVersion.zip"
 $prismUrl = "https://github.com/PrismLauncher/PrismLauncher/releases/download/$prismVersion/$prismZip"
 $prismSha256 = "ab35a770fb06d89d2ccc098079db5db329fb4e68f42b72babd8b095efde3d2d7"
 $prismLicenseUrl = "https://raw.githubusercontent.com/PrismLauncher/PrismLauncher/$prismVersion/LICENSE"
+# ModEngine2 (MIT), bundled: it starts Elden Ring offline with Easy Anti-Cheat off and loads eldencraft.dll.
+$me2Zip = "ModEngine-2.1.0.0-win64.zip"
+$me2Url = "https://github.com/soulsmods/ModEngine2/releases/download/release-2.1.0/$me2Zip"
+$me2Sha256 = "8a5952453a8e3851247ed6a9dd8926ca638cf6135aa96c90298b63f15d8900ef"
+$me2LicenseUrl = "https://raw.githubusercontent.com/soulsmods/ModEngine2/main/LICENSE-MIT"
 $fabricApiJar = "fabric-api-0.161.0+26.3.jar"
 $fabricApiUrl = "https://cdn.modrinth.com/data/P7dR8mSH/versions/bNnaTiuM/fabric-api-0.161.0%2B26.3.jar"
 $fabricApiSha512 = "ed6b2586d6fde11fde8472f5a527c51e99b67026e46f94d4bfd85e7e28ce5ee299173ee16ad576ceb51f39f98d30a811086a6deb1a86a524859cc16e12da109d"
@@ -82,6 +87,12 @@ $cache = "$root\.tools\prism"
 Get-Pinned $prismUrl "$cache\$prismZip" SHA256 $prismSha256
 Get-Pinned $fabricApiUrl "$cache\$fabricApiJar" SHA512 $fabricApiSha512
 Get-Pinned $prismLicenseUrl "$cache\PrismLauncher-$prismVersion-LICENSE.txt" "" ""
+Get-Pinned $me2Url "$cache\$me2Zip" SHA256 $me2Sha256
+Get-Pinned $me2LicenseUrl "$cache\ModEngine2-LICENSE-MIT.txt" "" ""
+$me2 = "$root\.tools\me2"
+if (Test-Path $me2) { Remove-Item -Recurse -Force $me2 }
+Expand-Archive "$cache\$me2Zip" $me2 -Force
+$me2Root = "$me2\ModEngine-2.1.0.0-win64"
 
 Get-ChildItem $dist -Exclude logs | Remove-Item -Recurse -Force
 
@@ -101,6 +112,13 @@ New-ZipFromFolder "$dist\EldenCraft-Minecraft-$version.zip" $bundle
 Remove-Item -Recurse -Force $bundle
 
 New-Zip "$dist\EldenCraft-$version.zip" ([ordered]@{
+    "modengine2/modengine2_launcher.exe" = "$me2Root\modengine2_launcher.exe"
+    "modengine2/modengine2/bin/modengine2.dll" = "$me2Root\modengine2\bin\modengine2.dll"
+    "modengine2/modengine2/bin/lua.dll" = "$me2Root\modengine2\bin\lua.dll"
+    "modengine2/modengine2/crashpad/crashpad_handler.exe" = "$me2Root\modengine2\crashpad\crashpad_handler.exe"
+    "modengine2/modengine2/crashpad/zlib1.dll" = "$me2Root\modengine2\crashpad\zlib1.dll"
+    "modengine2/README.txt" = "$me2Root\README.txt"
+    "modengine2/LICENSE-ModEngine2.txt" = "$cache\ModEngine2-LICENSE-MIT.txt"
     "eldencraft/eldencraft.dll" = $dll
     "eldencraft/config_eldencraft.toml" = "$root\er\config_eldencraft.toml"
     "eldencraft/LICENSE.txt" = "$root\LICENSE"

@@ -9,7 +9,8 @@ EldenCraft contains no game files from Elden Ring or Minecraft. Players need the
   https://github.com/vswarte/fromsoftware-rs
 - **Prism Launcher** (GPL-3.0), unmodified portable build, starts Minecraft. https://prismlauncher.org
 - **Fabric Loader / Fabric API** (Apache-2.0). https://fabricmc.net
-- **ModEngine2** (installed by Melty, not bundled) loads the Elden Ring side offline.
+- **ModEngine2** 2.1.0 by soulsmods (MIT), bundled unmodified in `modengine2/`: starts Elden Ring offline with
+  Easy Anti-Cheat off and loads the Elden Ring side. https://github.com/soulsmods/ModEngine2
 
 EldenCraft is a fan project, not affiliated with FromSoftware, Bandai Namco, Mojang or Microsoft.
 Built with AI assistance (Claude).

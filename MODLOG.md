@@ -25,3 +25,12 @@ Pattern 2 passthrough: ER native Rust DLL (ModEngine2 external_dlls) <-> hidden 
 - Save backup: %APPDATA%\EldenRing\76561198712842029\ER0000.sl2.before-eldencraft (sha256 4e0533dd...).
 - Untested: everything in game. First checks: DLL log at %LOCALAPPDATA%\EldenCraft\eldencraft.log, ME2 relative
   external_dlls path, EzDraw visible in retail, axis handedness, camera forward sign, tile continuity.
+
+## 2026-10-07 test 1 (user pressed Test): Elden Ring never started
+- Melty installed ModEngine2 to %APPDATA%\Melty\mods\loaders\modengine2, not {managed}/modengine2
+  ({managed} = mods\managed\eldencraft-2 for our package). Our launch path did not exist: installed 1, launched 0.
+- Minecraft side fine: Prism sign-in done (user fahad132), MC 26.3 + SkyCraft 0.1.2 started hidden, waited 10 min
+  for the host, quit. Melty's setup step worked ("Backend library:" seen).
+- Fix (0.1.1): bundle ModEngine2 2.1.0 (MIT, sha256 8a59...00ef, same zip Melty uses) in our main zip under
+  modengine2/, launch {managed}/modengine2/modengine2_launcher.exe -t er -p {game}/Game/eldenring.exe -c <abs config>.
+  ME2 resolves relative external_dlls against the config folder (settings.h node_to_val).
