@@ -1,0 +1,12 @@
+== C:\Users\runneradmin\.gradle\caches\fabric-loom\26.3\minecraft-server.jar
+== C:\Users\runneradmin\.gradle\caches\fabric-loom\26.3\minecraft-client.jar
+
+  public void move(net.minecraft.world.entity.MoverType, net.minecraft.world.phys.Vec3);
+  private net.minecraft.world.phys.Vec3 collide(net.minecraft.world.phys.Vec3);
+== C:\Users\runneradmin\.gradle\caches\fabric-loom\26.3\minecraft-extracted_server.jar
+  public void move(net.minecraft.world.entity.MoverType, net.minecraft.world.phys.Vec3);
+  private net.minecraft.world.phys.Vec3 collide(net.minecraft.world.phys.Vec3);
+== C:\Users\runneradmin\.gradle\caches\fabric-loom\26.3\minecraft-common.jar
+  public void move(net.minecraft.world.entity.MoverType, net.minecraft.world.phys.Vec3);
+  private net.minecraft.world.phys.Vec3 collide(net.minecraft.world.phys.Vec3);
+

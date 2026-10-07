@@ -1,0 +1,249 @@
+    Updating git repository `https://github.com/vswarte/fromsoftware-rs`
+    Updating git repository `https://github.com/veeenu/hudhook`
+    Updating crates.io index
+     Locking 110 packages to latest Rust 1.98.1 compatible versions
+      Adding windows-sys v0.59.0 (available: v0.61.2)
+   Compiling eldencraft v0.2.5 (D:\a\eldencraft\eldencraft\er)
+warning: constant `RANGE` is never used
+  --> src\actors.rs:21:7
+   |
+21 | const RANGE: f32 = 40.0;
+   |       ^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `MAX_MIRRORED` is never used
+  --> src\actors.rs:22:7
+   |
+22 | const MAX_MIRRORED: usize = 64;
+   |       ^^^^^^^^^^^^
+
+warning: constant `HOSTILE_TEAMS` is never used
+  --> src\actors.rs:24:7
+   |
+24 | const HOSTILE_TEAMS: [u8; 2] = [6, 7];
+   |       ^^^^^^^^^^^^^
+
+warning: fields `ids`, `next_id`, and `teams_seen` are never read
+  --> src\actors.rs:27:5
+   |
+26 | pub struct Actors {
+   |            ------ fields in this struct
+27 |     ids: HashMap<eldenring::cs::FieldInsHandle, i32>,
+   |     ^^^
+28 |     handles: HashMap<i32, eldenring::cs::FieldInsHandle>,
+29 |     next_id: i32,
+   |     ^^^^^^^
+30 |     teams_seen: HashSet<(u8, i32)>,
+   |     ^^^^^^^^^^
+
+warning: method `publish` is never used
+  --> src\actors.rs:68:12
+   |
+50 | impl Actors {
+   | ----------- method in this implementation
+...
+68 |     pub fn publish(&mut self, link: &Link, frame: &Frame, player: &PlayerIns) {
+   |            ^^^^^^^
+
+warning: method `texel` is never used
+  --> src\blocks.rs:35:8
+   |
+34 | impl Image {
+   | ---------- method in this implementation
+35 |     fn texel(&self, u: f32, v: f32) -> [f32; 4] {
+   |        ^^^^^
+
+warning: method `texel` is never used
+   --> src\blocks.rs:197:8
+    |
+178 | impl Blocks {
+    | ----------- method in this implementation
+...
+197 |     fn texel(&self, u: f32, v: f32) -> [f32; 4] {
+    |        ^^^^^
+
+warning: method `redo_around` is never used
+   --> src\collision.rs:114:12
+    |
+ 77 | impl Collision {
+    | -------------- method in this implementation
+...
+114 |     pub fn redo_around(&mut self, mc: [f64; 3]) {
+    |            ^^^^^^^^^^^
+
+warning: field `world_id` is never read
+  --> src\coords.rs:22:9
+   |
+17 | pub struct Frame {
+   |            ----- field in this struct
+...
+22 |     pub world_id: u32,
+   |         ^^^^^^^^
+   |
+   = note: `Frame` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: methods `is_held` and `movement` are never used
+   --> src\input.rs:155:8
+    |
+132 | impl Input {
+    | ---------- methods in this implementation
+...
+155 |     fn is_held(&self, kind: u16, code: u16) -> bool {
+    |        ^^^^^^^
+...
+160 |     pub fn movement(&self) -> crate::walk::MoveInput {
+    |            ^^^^^^^^
+
+warning: constant `RAY_FILTER` is never used
+  --> src\walk.rs:17:7
+   |
+17 | const RAY_FILTER: u32 = 0x0200_0058;
+   |       ^^^^^^^^^^
+
+warning: constant `WALK` is never used
+  --> src\walk.rs:20:7
+   |
+20 | const WALK: f64 = 4.317;
+   |       ^^^^
+
+warning: constant `SPRINT` is never used
+  --> src\walk.rs:21:7
+   |
+21 | const SPRINT: f64 = 5.612;
+   |       ^^^^^^
+
+warning: constant `SNEAK` is never used
+  --> src\walk.rs:22:7
+   |
+22 | const SNEAK: f64 = 1.295;
+   |       ^^^^^
+
+warning: constant `GROUND_RATE` is never used
+  --> src\walk.rs:23:7
+   |
+23 | const GROUND_RATE: f64 = 12.1; // 0.546 friction per tick
+   |       ^^^^^^^^^^^
+
+warning: constant `AIR_RATE` is never used
+  --> src\walk.rs:24:7
+   |
+24 | const AIR_RATE: f64 = 1.89; // 0.91 per tick
+   |       ^^^^^^^^
+
+warning: constant `AIR_ACCEL` is never used
+  --> src\walk.rs:25:7
+   |
+25 | const AIR_ACCEL: f64 = 8.0; // 0.02 blocks/tick^2
+   |       ^^^^^^^^^
+
+warning: constant `AIR_ACCEL_SPRINT` is never used
+  --> src\walk.rs:26:7
+   |
+26 | const AIR_ACCEL_SPRINT: f64 = 10.4;
+   |       ^^^^^^^^^^^^^^^^
+
+warning: constant `GRAVITY` is never used
+  --> src\walk.rs:27:7
+   |
+27 | const GRAVITY: f64 = 31.7; // 0.08 per tick^2 with 0.98 drag
+   |       ^^^^^^^
+
+warning: constant `DRAG` is never used
+  --> src\walk.rs:28:7
+   |
+28 | const DRAG: f64 = 0.404;
+   |       ^^^^
+
+warning: constant `JUMP` is never used
+  --> src\walk.rs:29:7
+   |
+29 | const JUMP: f64 = 8.9; // 1.25-block jump
+   |       ^^^^
+
+warning: constant `SPRINT_JUMP_BOOST` is never used
+  --> src\walk.rs:30:7
+   |
+30 | const SPRINT_JUMP_BOOST: f64 = 4.0;
+   |       ^^^^^^^^^^^^^^^^^
+
+warning: constant `SKIN` is never used
+  --> src\walk.rs:34:7
+   |
+34 | const SKIN: f64 = 0.04;
+   |       ^^^^
+
+warning: constant `WALL_HEIGHTS` is never used
+  --> src\walk.rs:36:7
+   |
+36 | const WALL_HEIGHTS: [f64; 3] = [STEP + 0.05, 1.1, 1.7];
+   |       ^^^^^^^^^^^^
+
+warning: constant `SNAP_DOWN` is never used
+  --> src\walk.rs:38:7
+   |
+38 | const SNAP_DOWN: f64 = 0.55;
+   |       ^^^^^^^^^
+
+warning: constant `MAX_DT` is never used
+  --> src\walk.rs:39:7
+   |
+39 | const MAX_DT: f64 = 0.05;
+   |       ^^^^^^
+
+warning: struct `MoveInput` is never constructed
+  --> src\walk.rs:42:12
+   |
+42 | pub struct MoveInput {
+   |            ^^^^^^^^^
+
+warning: fields `sprinting` and `airborne_since_ground` are never read
+  --> src\walk.rs:55:9
+   |
+50 | pub struct Walker {
+   |            ------ fields in this struct
+...
+55 |     pub sprinting: bool,
+   |         ^^^^^^^^^
+...
+59 |     pub airborne_since_ground: f64,
+   |         ^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `Ctx` is never constructed
+  --> src\walk.rs:62:8
+   |
+62 | struct Ctx<'a> {
+   |        ^^^
+
+warning: methods `ray`, `block_ground`, and `box_in_blocks` are never used
+   --> src\walk.rs:71:8
+    |
+ 69 | impl Ctx<'_> {
+    | ------------ methods in this implementation
+ 70 |     /// Distance along `dir` (unit, MC space) from `from` to Elden Ring's map, within `len`.
+ 71 |     fn ray(&self, from: [f64; 3], dir: [f64; 3], len: f64, rays: &mut u32) -> Option<f64> {
+    |        ^^^
+...
+ 83 |     fn block_ground(&self, p: [f64; 3], lo: f64, hi: f64) -> Option<f64> {
+    |        ^^^^^^^^^^^^
+...
+102 |     fn box_in_blocks(&self, p: [f64; 3]) -> bool {
+    |        ^^^^^^^^^^^^^
+
+warning: methods `reset`, `step`, and `ground` are never used
+   --> src\walk.rs:134:12
+    |
+119 | impl Walker {
+    | ----------- methods in this implementation
+...
+134 |     pub fn reset(&mut self, feet: [f64; 3]) {
+    |            ^^^^^
+...
+143 |     pub fn step(
+    |            ^^^^
+...
+314 |     fn ground(&self, cx: &Ctx, p: [f64; 3], below: f64, rays: &mut u32) -> Option<f64> {
+    |        ^^^^^^
+
+warning: `eldencraft` (lib) generated 31 warnings
+    Finished `release` profile [optimized + debuginfo] target(s) in 24.13s
