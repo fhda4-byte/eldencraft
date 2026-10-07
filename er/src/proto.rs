@@ -137,6 +137,54 @@ pub struct InputEvent {
 }
 const _: () = assert!(size_of::<InputEvent>() == 16);
 
+// ---- actor table (host -> MC, seqlock) and event ring (MC -> host) -------------------------
+pub const MAX_ACTORS: usize = 256;
+pub const AT_COUNT_OFF: usize = 0x04;
+pub const AT_RECORDS_OFF: usize = 0x40;
+pub const ACTOR_RECORD_BYTES: usize = 64;
+pub const ACTOR_HOSTILE: u32 = 1;
+pub const ACTOR_DEAD: u32 = 1 << 1;
+pub const ACTOR_IN_COMBAT: u32 = 1 << 3;
+
+pub const EVENT_RING_ENTRIES: u64 = 512;
+pub const EV_HEAD_OFF: usize = 0x00;
+pub const EV_TAIL_OFF: usize = 0x40;
+pub const EV_DATA_OFF: usize = 0x80;
+pub const EV_HIT_ACTOR: i32 = 1;
+pub const EV_PLAYER_DIED: i32 = 2;
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct ActorRecord {
+    pub form_id: i32,
+    pub flags: u32,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub yaw: f32,
+    pub width: f32,
+    pub height: f32,
+    pub health_frac: f32,
+    pub level: u16,
+    pub pad: u16,
+    pub name: [u8; 24],
+}
+const _: () = assert!(size_of::<ActorRecord>() == ACTOR_RECORD_BYTES);
+
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug)]
+pub struct Event {
+    pub kind: i32,
+    pub form_id: i32,
+    pub a: f32,
+    pub b: f32,
+    pub c: f32,
+    pub d: f32,
+    pub flags: i32,
+    pub weapon: i32,
+}
+const _: () = assert!(size_of::<Event>() == 32);
+
 // ---- collision ring ----------------------------------------------------------------------
 pub const COL_RING_HEAD_OFF: usize = 0x00;
 pub const COL_RING_TAIL_OFF: usize = 0x40;

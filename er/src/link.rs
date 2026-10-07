@@ -171,6 +171,41 @@ impl Link {
         self.a64(ring + INPUT_RING_HEAD_OFF).store(head + 1, Ordering::Release);
     }
 
+    /// Writes the nearby-actor table (seqlock) for Minecraft's hittable stand-ins.
+    pub fn write_actors(&self, actors: &[ActorRecord]) {
+        let n = actors.len().min(MAX_ACTORS);
+        let seq = self.a32(OFF_ACTOR_TABLE);
+        let s = seq.load(Ordering::Relaxed);
+        seq.store(s.wrapping_add(1), Ordering::Relaxed);
+        fence(Ordering::Release);
+        unsafe {
+            (self.base.add(OFF_ACTOR_TABLE + AT_COUNT_OFF) as *mut u32).write_volatile(n as u32);
+            std::ptr::copy_nonoverlapping(
+                actors.as_ptr() as *const u8,
+                self.base.add(OFF_ACTOR_TABLE + AT_RECORDS_OFF),
+                n * ACTOR_RECORD_BYTES,
+            );
+        }
+        seq.store(s.wrapping_add(2), Ordering::Release);
+    }
+
+    /// Every event Minecraft queued since last time (hits on actors, player death).
+    pub fn drain_events(&self, mut f: impl FnMut(Event)) {
+        let ring = OFF_EVENT_RING;
+        let head = self.a64(ring + EV_HEAD_OFF).load(Ordering::Acquire);
+        let mut tail = self.a64(ring + EV_TAIL_OFF).load(Ordering::Relaxed);
+        if head.wrapping_sub(tail) > EVENT_RING_ENTRIES {
+            tail = head - EVENT_RING_ENTRIES;
+        }
+        while tail < head {
+            let idx = (tail & (EVENT_RING_ENTRIES - 1)) as usize;
+            let e = unsafe { (self.base.add(ring + EV_DATA_OFF + idx * size_of::<Event>()) as *const Event).read_volatile() };
+            f(e);
+            tail += 1;
+        }
+        self.a64(ring + EV_TAIL_OFF).store(tail, Ordering::Release);
+    }
+
     /// One message on the collision ring; false when the ring is full (try again next frame).
     pub fn write_collision(&self, kind: u32, payload: &[u8]) -> bool {
         let ring = OFF_COLLISION_RING;

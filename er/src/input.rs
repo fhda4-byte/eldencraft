@@ -61,6 +61,7 @@ const PAD_HOLD: &[(UserInputKey, u16, u16)] = &[
     (UserInputKey::Guard, IN_MOUSE_BUTTON, 3),  // place / use
     (UserInputKey::UseItem, IN_MOUSE_BUTTON, 3),
     (UserInputKey::ResetCamera, IN_KEY, 8),    // R3: Minecraft inventory (triangle stays Elden Ring's interact)
+    (UserInputKey::SwitchSpell, IN_KEY, 62),   // d-pad up: F5, first / third person
 ];
 
 /// Keyboard/mouse in use this recently means controller mappings stay off (no double meanings).

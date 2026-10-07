@@ -88,3 +88,13 @@ Pattern 2 passthrough: ER native Rust DLL (ModEngine2 external_dlls) <-> hidden 
   allowed); Minecraft follows every tick (follow mode, on-ground = !physics.is_falling). Placed Minecraft blocks are
   added on top (walk::block_fix: stand on / step onto / no walking into them; gravity off while on one).
   walk.rs's ray controller is kept but unused.
+
+## 2026-10-07 test (0.2.1): walking works; no damage to enemies; wants first/third person switch
+- 0.2.2 fighting: actor table (SkyCraft protocol: seqlock, 64-byte records) from WorldChrMan.chr_inses_by_distance
+  (ChrType::Npc, hp > 0, within 40 m, max 64; hostile = team_type 6/7, every team logged once); SkyCraft's server
+  mirrors them as hittable SkyrimActorEntity stand-ins and sends EV_HIT_ACTOR on the event ring; we take
+  ceil(mc_damage * max_hp / clamp(max_hp/25, 20, 200)) off CSChrDataModule.hp (ordinary enemy ~ zombie).
+- 0.2.2 camera: F5 (keyboard) / d-pad up (pad) goes to Minecraft; Minecraft's camera_mode drives ours: 0 = first
+  person (pers_cam_1 position moved to Steve's eyes at ChrIns_PostPhysics, after CameraStep; Steve not drawn),
+  1 = third person; Minecraft's front view (2) is skipped with a second F5. Camera forward sign learned once in
+  third person.

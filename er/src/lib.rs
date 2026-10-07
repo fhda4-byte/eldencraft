@@ -4,6 +4,7 @@
 //! blocks, inventory, health and hunger; Elden Ring runs and draws the world.
 //! Design and status: sheets/*.json. Every system here is a row in sheets/systems.json.
 
+mod actors;
 mod blocks;
 mod boot;
 mod collision;
@@ -65,7 +66,10 @@ struct State {
     er_phase: bool,
     viewport: (u32, u32),
     viewport_checked: Option<Instant>,
-    cam_flip_logged: bool,
+    cam_flip: Option<bool>,
+    actors: actors::Actors,
+    f5_done: bool,
+    first_person: bool,
     launcher: launcher::Launcher,
     teleport_seq: u32,
     world_id: u32,
@@ -96,7 +100,10 @@ impl State {
             er_phase: false,
             viewport: (1920, 1080),
             viewport_checked: None,
-            cam_flip_logged: false,
+            cam_flip: None,
+            actors: actors::Actors::new(),
+            f5_done: false,
+            first_person: false,
             launcher: launcher::Launcher::new(),
             teleport_seq: 1,
             world_id: 0,
@@ -218,19 +225,26 @@ impl State {
         // Look direction: Elden Ring's camera is authoritative (Minecraft follows it).
         // The camera's rows: right, up, forward, position (Havok space). Which way "forward" points
         // is checked against the player (a third-person camera always looks at them).
+        // The sign is learned once from a third-person camera (in first person the camera sits at
+        // the player, so the check can't be made then).
         let cam = unsafe { CSCamera::instance() }.ok().map(|c| {
             let m = &c.pers_cam_1.matrix;
             let pos = [m.3.0, m.3.1, m.3.2];
-            let mut fwd = [m.2.0, m.2.1, m.2.2];
+            let fwd = [m.2.0, m.2.1, m.2.2];
             let to_player = [havok[0] - pos[0], havok[1] + 1.2 - pos[1], havok[2] - pos[2]];
-            if fwd[0] * to_player[0] + fwd[1] * to_player[1] + fwd[2] * to_player[2] < 0.0 {
-                fwd = [-fwd[0], -fwd[1], -fwd[2]];
-                if !self.cam_flip_logged {
-                    log!("camera: forward is -row2");
-                    self.cam_flip_logged = true;
-                }
+            let dist = (to_player[0].powi(2) + to_player[1].powi(2) + to_player[2].powi(2)).sqrt();
+            let dot = fwd[0] * to_player[0] + fwd[1] * to_player[1] + fwd[2] * to_player[2];
+            ([[m.0.0, m.0.1, m.0.2], [m.1.0, m.1.1, m.1.2], fwd, pos], dist, dot)
+        });
+        let cam = cam.map(|(mut m, dist, dot)| {
+            if self.cam_flip.is_none() && dist > 1.5 {
+                self.cam_flip = Some(dot < 0.0);
+                log!("camera: forward is {}row2", if dot < 0.0 { "-" } else { "+" });
             }
-            ([[m.0.0, m.0.1, m.0.2], [m.1.0, m.1.1, m.1.2], fwd, pos], c.pers_cam_1.fov, c.pers_cam_1.aspect_ratio)
+            if self.cam_flip.unwrap_or(dot < 0.0) {
+                m[2] = [-m[2][0], -m[2][1], -m[2][2]];
+            }
+            (m, 0.0f32, 0.0f32)
         });
         let (yaw, pitch) = cam.map(|(m, _, _)| coords::mc_look(m[2])).unwrap_or((0.0, 0.0));
 
@@ -313,16 +327,51 @@ impl State {
         self.collision.step(link, &frame, player, feet);
         self.blocks.drain(link);
 
-        // Minecraft only sends the player model in third person: ask for it once (F5).
-        if mc_ready && mc.camera_mode == 0 && self.last_f5.map_or(true, |t| t.elapsed() > Duration::from_secs(5)) {
-            link.push_input(IN_KEY, 62, 1, 0, 0);
-            link.push_input(IN_KEY, 62, 0, 0, 0);
-            self.last_f5 = Some(Instant::now());
-            log!("asked Minecraft for third person (F5)");
+        // Camera: F5 (or d-pad up) switches first / third person, the Minecraft way. Minecraft starts
+        // in first person; the first time it drives we ask for third person once. Minecraft's
+        // front-facing view is skipped (Elden Ring's camera can't look at the player from the front).
+        if mc_ready {
+            let f5_ready = self.last_f5.map_or(true, |t| t.elapsed() > Duration::from_millis(400));
+            let want_f5 = (!self.f5_done && mc.camera_mode == 0) || mc.camera_mode == 2;
+            if want_f5 && f5_ready {
+                link.push_input(IN_KEY, 62, 1, 0, 0);
+                link.push_input(IN_KEY, 62, 0, 0, 0);
+                self.last_f5 = Some(Instant::now());
+                self.f5_done = true;
+                log!("F5 to Minecraft (camera mode {})", mc.camera_mode);
+            }
+            if mc.camera_mode != 0 {
+                self.f5_done = true;
+            }
         }
-        // Steve replaces the Tarnished while Minecraft drives.
-        let show_steve = mc_ready && self.blocks.has_avatar();
-        if show_steve {
+        let first_person = mc_ready && self.f5_done && mc.camera_mode == 0;
+        if first_person != self.first_person {
+            log!("camera: {}", if first_person { "first person" } else { "third person" });
+            self.first_person = first_person;
+        }
+        if first_person {
+            // Elden Ring's camera keeps its rotation (mouse / right stick) but sits at Steve's eyes.
+            let eye_h = if mc.eye_height > 0.5 { mc.eye_height as f64 } else { 1.62 };
+            let eye = frame.havok_for_mc([here[0], here[1] + eye_h, here[2]]);
+            if let Ok(c) = unsafe { CSCamera::instance_mut() } {
+                let m = &mut c.pers_cam_1.matrix;
+                m.3.0 = eye[0];
+                m.3.1 = eye[1];
+                m.3.2 = eye[2];
+            }
+        }
+
+        // Fighting: nearby enemies go to Minecraft as hittable stand-ins; its hits come back as damage.
+        if mc_ready {
+            self.actors.publish(link, &frame, player);
+        } else {
+            self.actors.clear(link);
+        }
+        self.actors.apply_hits(link);
+
+        // Steve replaces the Tarnished while Minecraft drives (drawn in third person only).
+        let show_steve = mc_ready && self.blocks.has_avatar() && !first_person;
+        if mc_ready && (show_steve || first_person) {
             player.chr_ins.chr_flags1c5.set_enable_render(false);
             self.hid_model = true;
         } else if self.hid_model {
@@ -385,7 +434,7 @@ impl State {
             None => "no player".into(),
         };
         log!(
-            "frame {} | {} | walker pos ({:.2}, {:.2}, {:.2}) vel ({:.2}, {:.2}, {:.2}) ground {} rays {} blocked {} | mc alive {} pid {} flags {:#x} ack {}/{} pos ({:.2}, {:.2}, {:.2}) | driving {} | collision epoch {} columns {} walls {} rays {}/{} | render msgs {} sections {} avatar frames {} hud frames {} quads {}",
+            "frame {} | {} | walker pos ({:.2}, {:.2}, {:.2}) vel ({:.2}, {:.2}, {:.2}) ground {} rays {} blocked {} | mc alive {} pid {} flags {:#x} ack {}/{} pos ({:.2}, {:.2}, {:.2}) | driving {} | collision epoch {} columns {} walls {} rays {}/{} | render msgs {} sections {} avatar frames {} hud frames {} quads {} | actors {} hits {} | first person {}",
             self.frames,
             where_,
             self.walker.pos[0],
@@ -415,7 +464,10 @@ impl State {
             self.blocks.section_count(),
             self.blocks.avatar_frames,
             self.hud.frames,
-            self.hud.quad_count()
+            self.hud.quad_count(),
+            self.actors.mirrored,
+            self.actors.hits,
+            self.first_person
         );
     }
 }
