@@ -1,6 +1,6 @@
 [package]
 name = "eldencraft"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2024"
 license = "MIT"
 description = "EldenCraft: play Elden Ring as a Minecraft player (Elden Ring side, loaded by ModEngine2)"

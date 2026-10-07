@@ -20,7 +20,7 @@ use crate::proto::*;
 const KEYS: &[(i32, u16)] = &[
     (0x41, 4), (0x42, 5), (0x43, 6), (0x44, 7), (0x46, 9), (0x47, 10), (0x48, 11),
     (0x49, 12), (0x4A, 13), (0x4B, 14), (0x4C, 15), (0x4D, 16), (0x4E, 17), (0x4F, 18), (0x50, 19),
-    (0x51, 20), (0x52, 21), (0x53, 22), (0x54, 23), (0x55, 24), (0x56, 25), (0x57, 26), (0x58, 27),
+    (0x52, 21), (0x53, 22), (0x54, 23), (0x55, 24), (0x56, 25), (0x57, 26), (0x58, 27),
     (0x59, 28), (0x5A, 29),
     (0x31, 30), (0x32, 31), (0x33, 32), (0x34, 33), (0x35, 34), (0x36, 35), (0x37, 36), (0x38, 37),
     (0x39, 38), (0x30, 39),
@@ -44,7 +44,9 @@ const KEYS: &[(i32, u16)] = &[
 ];
 
 /// (Windows virtual key, SDL mouse button).
-const BUTTONS: &[(i32, u16)] = &[(0x01, 1), (0x04, 2), (0x02, 3)];
+/// Right mouse stays Elden Ring's guard; Minecraft's place / use is on R (Elden Ring's use-item key,
+/// switched off while Minecraft drives).
+const BUTTONS: &[(i32, u16)] = &[(0x01, 1), (0x04, 2), (0x52, 3)];
 
 /// Elden Ring's own controls (any controller it supports: PS5 DualSense, Xbox, ...) -> Minecraft.
 /// Read through the game's input layer, so the player's Elden Ring button layout applies.
@@ -58,9 +60,8 @@ const PAD_HOLD: &[(UserInputKey, u16, u16)] = &[
     (UserInputKey::Backstep, IN_KEY, 224),     // LCtrl: sprint (Elden Ring's dash button)
     (UserInputKey::Crouch, IN_KEY, 225),       // LShift: sneak
     (UserInputKey::Attack, IN_MOUSE_BUTTON, 1), // break / attack
-    (UserInputKey::Guard, IN_MOUSE_BUTTON, 3),  // place / use
     (UserInputKey::UseItem, IN_MOUSE_BUTTON, 3),
-    (UserInputKey::ResetCamera, IN_KEY, 8),    // R3: Minecraft inventory (triangle stays Elden Ring's interact)
+    (UserInputKey::SwitchItem, IN_KEY, 8),     // d-pad down: Minecraft inventory (R3 stays Elden Ring's lock-on)
     (UserInputKey::SwitchSpell, IN_KEY, 62),   // d-pad up: F5, first / third person
 ];
 

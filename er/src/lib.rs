@@ -37,27 +37,13 @@ const EC_FOLLOW: u32 = 1 << 8;
 const EC_ON_GROUND: u32 = 1 << 9;
 /// First-person eye height (metres): Steve's 1.62 reads low next to Elden Ring's people and doors.
 const EYE_HEIGHT: f64 = 1.7;
-/// Elden Ring actions switched off while Minecraft drives: attacks, items, roll, magic, gestures,
-/// guard, kicks, two-handing, Torrent. Walking, jumping, dashing, ladders and interact stay on.
+/// Elden Ring actions switched off while Minecraft drives: only using items (healing is Minecraft's
+/// food and hearts), gestures and calling Torrent. Fighting is Elden Ring's own (v0.2.4: attacks,
+/// guard, skills, rolls, magic, two-handing), with its weight: stagger, blood, sound, real deaths.
 fn block_actions(a: &mut eldenring::cs::ChrActions, on: bool) {
-    a.set_r1(on);
-    a.set_r2(on);
-    a.set_l1(on);
-    a.set_l2(on);
     a.set_use_item(on);
-    a.set_l3(on);
-    a.set_rolling(on);
-    a.set_magic_r(on);
-    a.set_magic_l(on);
     a.set_gesture(on);
-    a.set_guard(on);
-    a.set_light_kick(on);
-    a.set_heavy_kick(on);
-    a.set_change_style_r(on);
-    a.set_change_style_l(on);
     a.set_rideon(on);
-    a.set_magic_r2(on);
-    a.set_magic_l2(on);
 }
 
 struct State {
@@ -373,12 +359,9 @@ impl State {
         }
         camera::apply();
 
-        // Fighting: nearby enemies go to Minecraft as hittable stand-ins; its hits come back as damage.
-        if mc_ready {
-            self.actors.publish(link, &frame, player);
-        } else {
-            self.actors.clear(link);
-        }
+        // Fighting is Elden Ring's own (the user's choice, v0.2.4): no Minecraft stand-ins to hit, so
+        // a hit is never counted twice. Enemies' hits on the Tarnished still become Minecraft damage.
+        self.actors.clear(link);
         self.actors.apply_hits(link);
         self.actors.player_tick(link, player, mc_ready);
 

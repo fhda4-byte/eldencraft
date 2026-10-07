@@ -110,3 +110,13 @@ Pattern 2 passthrough: ER native Rust DLL (ModEngine2 external_dlls) <-> hidden 
 - 0.2.3 first person: camera module writes pers_cam_1 at PostPhysics and again at Draw_Pre; eye 1.7 m;
   Minecraft's FOV (fov_deg, sprint widening) and view bobbing (walk_dist/bob interpolated by tick QPC);
   near plane 0.05 while in first person.
+
+## 2026-10-07 test (0.2.3): "hits and guard have no weight, enemies just lose health until they die"
+- Log: flinch request (8000) consumed but no visible weight; enemies at 0 HP keep death_flag false, render true
+  (writing HP doesn't kill properly). Enemy hits on the Tarnished -> Minecraft hearts worked (5 hits, 20 -> 8).
+- User chose (multiple choice): real Elden Ring combat.
+- 0.2.4: Elden Ring's own attacks, guard, skills, rolls, magic, two-handing are allowed again (only use-item,
+  gestures, Torrent blocked); no actor stand-ins sent to Minecraft (no double hits); enemy hits on the Tarnished
+  still become Minecraft damage, Minecraft death still kills the Tarnished. Controls: right mouse = Elden Ring
+  guard only, Minecraft place/use moved to R (keyboard) and square/UseItem (pad); pad Guard no longer places blocks;
+  Minecraft inventory on pad moved to d-pad down (R3 back to lock-on); Q no longer forwarded (lock-on, not drop).
