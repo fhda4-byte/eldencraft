@@ -6,6 +6,7 @@
 
 mod actors;
 mod blocks;
+mod camera;
 mod boot;
 mod collision;
 mod coords;
@@ -34,6 +35,8 @@ const SETTLE: Duration = Duration::from_secs(3);
 /// tick instead of moving itself, and whether that position is standing on the ground.
 const EC_FOLLOW: u32 = 1 << 8;
 const EC_ON_GROUND: u32 = 1 << 9;
+/// First-person eye height (metres): Steve's 1.62 reads low next to Elden Ring's people and doors.
+const EYE_HEIGHT: f64 = 1.7;
 /// Elden Ring actions switched off while Minecraft drives: attacks, items, roll, magic, gestures,
 /// guard, kicks, two-handing, Torrent. Walking, jumping, dashing, ladders and interact stay on.
 fn block_actions(a: &mut eldenring::cs::ChrActions, on: bool) {
@@ -169,6 +172,7 @@ impl State {
             self.input.poll(link, false, false);
             self.release(None);
             self.hud.publish(false);
+            camera::set(None);
             self.report(link, &mc, None);
             return;
         };
@@ -183,6 +187,7 @@ impl State {
             self.input.poll(link, false, false);
             self.release(Some(&mut *player));
             self.hud.publish(false);
+            camera::set(None);
             self.report(link, &mc, None);
             return;
         }
@@ -350,16 +355,23 @@ impl State {
             self.first_person = first_person;
         }
         if first_person {
-            // Elden Ring's camera keeps its rotation (mouse / right stick) but sits at Steve's eyes.
-            let eye_h = if mc.eye_height > 0.5 { mc.eye_height as f64 } else { 1.62 };
-            let eye = frame.havok_for_mc([here[0], here[1] + eye_h, here[2]]);
-            if let Ok(c) = unsafe { CSCamera::instance_mut() } {
-                let m = &mut c.pers_cam_1.matrix;
-                m.3.0 = eye[0];
-                m.3.1 = eye[1];
-                m.3.2 = eye[2];
+            // Elden Ring's camera keeps its rotation (mouse / right stick) but sits at Steve's eyes,
+            // with Minecraft's view bobbing and field of view.
+            let t = camera::partial_tick(mc.tick_qpc, mc.tick_ms);
+            let lerp = |a: f32, b: f32| a + (b - a) * t;
+            let (side, up) = camera::bob(lerp(mc.walk_dist_o, mc.walk_dist), lerp(mc.bob_o, mc.bob));
+            let mut eye = frame.havok_for_mc([here[0], here[1] + EYE_HEIGHT, here[2]]);
+            if let Some((m, _, _)) = cam {
+                for i in 0..3 {
+                    eye[i] += m[0][i] * side + m[1][i] * up;
+                }
             }
+            let fov = if (30.0..=130.0).contains(&mc.fov_deg) { mc.fov_deg } else { 70.0 };
+            camera::set(Some(camera::Override { pos: eye, fov: fov.to_radians() }));
+        } else {
+            camera::set(None);
         }
+        camera::apply();
 
         // Fighting: nearby enemies go to Minecraft as hittable stand-ins; its hits come back as damage.
         if mc_ready {
@@ -368,6 +380,7 @@ impl State {
             self.actors.clear(link);
         }
         self.actors.apply_hits(link);
+        self.actors.player_tick(link, player, mc_ready);
 
         // Steve replaces the Tarnished while Minecraft drives (drawn in third person only).
         let show_steve = mc_ready && self.blocks.has_avatar() && !first_person;
@@ -518,6 +531,8 @@ pub unsafe extern "C" fn DllMain(hmodule: usize, reason: u32) -> bool {
             },
             CSTaskGroupIndex::ChrIns_PostPhysics,
         );
+        // First person: put the camera back at Steve's eyes just before drawing.
+        cs_task.run_recurring(|_: &FD4TaskData| camera::apply(), CSTaskGroupIndex::Draw_Pre);
     });
     true
 }

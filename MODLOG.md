@@ -98,3 +98,15 @@ Pattern 2 passthrough: ER native Rust DLL (ModEngine2 external_dlls) <-> hidden 
   person (pers_cam_1 position moved to Steve's eyes at ChrIns_PostPhysics, after CameraStep; Steve not drawn),
   1 = third person; Minecraft's front view (2) is skipped with a second F5. Camera forward sign learned once in
   third person.
+
+## 2026-10-07 test (0.2.2): hits land (log: 23 hits, soldiers 43000006 85 hp killed in 4-7 hits) but
+## fighting "doesn't feel good"; first person "height/angle wrong, shakes/lags, walking and jumping feel like nothing"
+- User picked (multi-choice): enemy doesn't react to hits; enemy doesn't die properly; enemies don't hit me;
+  Steve's swing looks bad. First person: height/angle wrong; camera shakes or lags; walking/jumping feel wrong.
+- 0.2.3 fighting: flinch = CSChrEventModule.request_animation_id 8000 on every hit that leaves HP; enemies at 0 HP
+  are checked 1.5 s later (hp, death_flag, render) and logged, to see whether the game finishes them. Enemies hurt
+  Steve: the Tarnished's HP losses become Minecraft damage (share of max HP x 20, IN_HURT melee, attacker =
+  last_hit_by's stand-in), Tarnished HP kept full; Minecraft death -> Tarnished HP 0 (Elden Ring death).
+- 0.2.3 first person: camera module writes pers_cam_1 at PostPhysics and again at Draw_Pre; eye 1.7 m;
+  Minecraft's FOV (fov_deg, sprint widening) and view bobbing (walk_dist/bob interpolated by tick QPC);
+  near plane 0.05 while in first person.
