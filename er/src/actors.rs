@@ -34,10 +34,9 @@ pub struct Actors {
     /// Enemies brought to 0 HP, checked a moment later (does the game finish them off?).
     dying: Vec<(eldenring::cs::FieldInsHandle, Instant, i32)>,
     flinch_logged: bool,
-    /// The Tarnished's HP last frame (its losses become Minecraft damage).
+    /// The Tarnished's HP last sent to Minecraft's hearts.
     last_hp: Option<i32>,
-    /// Minecraft's player died: the Tarnished dies too (Elden Ring's death, runes, grace).
-    kill_player: bool,
+    health_tick: u32,
 }
 
 /// Elden Ring's light-hit reaction animation (front flinch), played on every Minecraft hit.
@@ -61,7 +60,7 @@ impl Actors {
             dying: Vec::new(),
             flinch_logged: false,
             last_hp: None,
-            kill_player: false,
+            health_tick: 0,
         }
     }
 
@@ -189,10 +188,8 @@ impl Actors {
                         chr.npc_param_id, dmg, e.a, before, chr.modules.data.hp, chr.modules.data.max_hp
                     );
                 }
-                EV_PLAYER_DIED => {
-                    log!("Minecraft: player died; the Tarnished dies too");
-                    self.kill_player = true;
-                }
+                EV_PLAYER_DIED => log!("Minecraft: player died"),
+                5 => {} // skill use (Skyrim levelling), nothing here
                 other => log!("event {other} ignored"),
             }
         }
@@ -200,41 +197,23 @@ impl Actors {
 }
 
 impl Actors {
-    /// Enemies hit the Tarnished in Elden Ring: that damage goes to Minecraft (hearts, armour,
-    /// shields), and the Tarnished's own HP is kept full. Minecraft's health is the one that counts.
+    /// v0.2.5: Elden Ring's HP is the real health (enemy hits, guarding, flasks, graces, death);
+    /// Minecraft's hearts show it (share of max HP x 20), a few times a second.
     pub fn player_tick(&mut self, link: &Link, player: &mut PlayerIns, driving: bool) {
         if !driving {
             self.last_hp = None;
             return;
         }
-        let attacker = player.chr_ins.last_hit_by;
-        let data = &mut player.chr_ins.modules.data;
-        if self.kill_player {
-            self.kill_player = false;
-            data.hp = 0;
-            self.last_hp = None;
-            return;
-        }
-        let (hp, max) = (data.hp, data.max_hp.max(1));
-        if let Some(last) = self.last_hp {
-            if hp < last {
-                let loss = last - hp;
-                // A share of the Tarnished's health = the same share of Minecraft's 20.
-                let mc = loss as f32 / max as f32 * 20.0;
-                let form = self.ids.get(&attacker).copied().unwrap_or(0);
-                // SkyCraft's IN_HURT: damage x100, divided by 5 on the Minecraft side.
-                link.push_input(IN_HURT, 0, (mc * 5.0 * 100.0) as i32, form, 0);
-                log!("hurt: Elden Ring took {loss} of {max} -> Minecraft {mc:.1} (attacker {form})");
-                if hp <= 0 {
-                    // Elden Ring killed outright (a fall into the abyss): let it.
-                    self.last_hp = None;
-                    return;
-                }
+        let data = &player.chr_ins.modules.data;
+        let (hp, max) = (data.hp.max(0), data.max_hp.max(1));
+        self.health_tick = self.health_tick.wrapping_add(1);
+        if self.last_hp != Some(hp) || self.health_tick % 15 == 0 {
+            if self.last_hp.is_some_and(|l| l != hp) {
+                log!("health: Elden Ring {} -> {hp} of {max}", self.last_hp.unwrap_or(0));
             }
+            let hearts = hp as f32 / max as f32 * 20.0;
+            link.push_input(IN_SET_HEALTH, 0, (hearts * 100.0) as i32, 0, 0);
+            self.last_hp = Some(hp);
         }
-        if hp > 0 && hp < max {
-            data.hp = max;
-        }
-        self.last_hp = Some(data.hp);
     }
 }

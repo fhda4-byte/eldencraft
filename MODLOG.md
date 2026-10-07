@@ -120,3 +120,11 @@ Pattern 2 passthrough: ER native Rust DLL (ModEngine2 external_dlls) <-> hidden 
   still become Minecraft damage, Minecraft death still kills the Tarnished. Controls: right mouse = Elden Ring
   guard only, Minecraft place/use moved to R (keyboard) and square/UseItem (pad); pad Guard no longer places blocks;
   Minecraft inventory on pad moved to d-pad down (R3 back to lock-on); Q no longer forwarded (lock-on, not drop).
+
+## 2026-10-07 test (0.2.4): "DAMAGE 1 ... too much weakness"
+- Log: Minecraft's health had stayed low from the previous session (2.0); one Elden Ring hit (88 of 482 = 3.7) killed
+  Steve, and with flasks blocked nothing could heal. One hit = death.
+- 0.2.5: Elden Ring's HP is the real health (its damage, guard, flasks, graces, death). Minecraft's hearts mirror it
+  (new Fabric input 20 = set health, never below half a heart; sent on change and every 15 frames). No more
+  Minecraft-damage path; Minecraft death no longer kills the Tarnished. Flasks/items/gestures allowed (only Torrent
+  blocked). Minecraft place/use: C or mouse side buttons (keyboard), d-pad left (pad); R and square are flasks.

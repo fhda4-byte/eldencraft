@@ -37,12 +37,10 @@ const EC_FOLLOW: u32 = 1 << 8;
 const EC_ON_GROUND: u32 = 1 << 9;
 /// First-person eye height (metres): Steve's 1.62 reads low next to Elden Ring's people and doors.
 const EYE_HEIGHT: f64 = 1.7;
-/// Elden Ring actions switched off while Minecraft drives: only using items (healing is Minecraft's
-/// food and hearts), gestures and calling Torrent. Fighting is Elden Ring's own (v0.2.4: attacks,
+/// Elden Ring actions switched off while Minecraft drives: only calling Torrent. Items (flasks),
+/// gestures and everything else are Elden Ring's. Fighting is Elden Ring's own (v0.2.4: attacks,
 /// guard, skills, rolls, magic, two-handing), with its weight: stagger, blood, sound, real deaths.
 fn block_actions(a: &mut eldenring::cs::ChrActions, on: bool) {
-    a.set_use_item(on);
-    a.set_gesture(on);
     a.set_rideon(on);
 }
 

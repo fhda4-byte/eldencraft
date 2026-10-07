@@ -125,6 +125,8 @@ pub const IN_SCROLL: u16 = 3;
 pub const IN_RELEASE_ALL: u16 = 6;
 pub const IN_HURT: u16 = 7;
 pub const IN_OPEN_MENU: u16 = 8;
+/// EldenCraft's Fabric patch: set Minecraft's health (a = hearts x 100).
+pub const IN_SET_HEALTH: u16 = 20;
 
 #[repr(C)]
 #[derive(Clone, Copy)]

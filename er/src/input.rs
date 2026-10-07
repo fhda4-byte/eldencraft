@@ -44,9 +44,9 @@ const KEYS: &[(i32, u16)] = &[
 ];
 
 /// (Windows virtual key, SDL mouse button).
-/// Right mouse stays Elden Ring's guard; Minecraft's place / use is on R (Elden Ring's use-item key,
-/// switched off while Minecraft drives).
-const BUTTONS: &[(i32, u16)] = &[(0x01, 1), (0x04, 2), (0x52, 3)];
+/// Right mouse stays Elden Ring's guard and R its flask; Minecraft's place / use is on C and the
+/// mouse's side buttons.
+const BUTTONS: &[(i32, u16)] = &[(0x01, 1), (0x04, 2), (0x43, 3), (0x05, 3), (0x06, 3)];
 
 /// Elden Ring's own controls (any controller it supports: PS5 DualSense, Xbox, ...) -> Minecraft.
 /// Read through the game's input layer, so the player's Elden Ring button layout applies.
@@ -60,7 +60,6 @@ const PAD_HOLD: &[(UserInputKey, u16, u16)] = &[
     (UserInputKey::Backstep, IN_KEY, 224),     // LCtrl: sprint (Elden Ring's dash button)
     (UserInputKey::Crouch, IN_KEY, 225),       // LShift: sneak
     (UserInputKey::Attack, IN_MOUSE_BUTTON, 1), // break / attack
-    (UserInputKey::UseItem, IN_MOUSE_BUTTON, 3),
     (UserInputKey::SwitchItem, IN_KEY, 8),     // d-pad down: Minecraft inventory (R3 stays Elden Ring's lock-on)
     (UserInputKey::SwitchSpell, IN_KEY, 62),   // d-pad up: F5, first / third person
 ];
@@ -217,14 +216,13 @@ impl Input {
                     }
                     *wanted.entry((kind, code)).or_insert(false) |= state[k];
                 }
-                // D-pad right / left: next / previous hotbar slot (one step per press).
+                // D-pad right: next hotbar slot (one step per press). D-pad left: Minecraft place / use
+                // (square stays Elden Ring's flask).
                 let (right, left) = (state[PAD_HOLD.len()], state[PAD_HOLD.len() + 1]);
                 if right && !self.dpad_right {
                     link.push_input(IN_SCROLL, 0, -120, 0, 0);
                 }
-                if left && !self.dpad_left {
-                    link.push_input(IN_SCROLL, 0, 120, 0, 0);
-                }
+                *wanted.entry((IN_MOUSE_BUTTON, 3)).or_insert(false) |= left;
                 self.dpad_right = right;
                 self.dpad_left = left;
             }

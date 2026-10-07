@@ -63,6 +63,7 @@ public final class InputBridge {
 			}
 			case Proto.IN_RELEASE_ALL -> releaseAll();
 			case Proto.IN_HURT -> hurt(minecraft, code, a / 100.0F, b, c);
+			case 20 -> setHealth(minecraft, a / 100.0F); // EldenCraft: hearts mirror the Tarnished's HP
 			case Proto.IN_OPEN_MENU -> {
 				if (minecraft.gui.screen() == null && minecraft.player != null) {
 					releaseAll();
@@ -72,6 +73,27 @@ public final class InputBridge {
 			default -> {
 			}
 		}
+	}
+
+	/**
+	 * EldenCraft: Elden Ring's HP is the real health (flasks, guarding, graces), so Minecraft's hearts
+	 * show it. Never below half a heart: dying is Elden Ring's.
+	 */
+	private static void setHealth(Minecraft minecraft, float health) {
+		var server = minecraft.getSingleplayerServer();
+		if (minecraft.player == null || server == null) {
+			return;
+		}
+		var uuid = minecraft.player.getUUID();
+		server.execute(() -> {
+			ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+			if (player != null && player.isAlive()) {
+				float h = Math.max(0.5F, Math.min(health, player.getMaxHealth()));
+				if (Math.abs(player.getHealth() - h) > 0.05F) {
+					player.setHealth(h);
+				}
+			}
+		});
 	}
 
 	/** Skyrim hit the player: apply it as Minecraft damage on the integrated server (or the host's). */
